@@ -27,11 +27,11 @@ include_directories(${TENSORFLOW_INCLUDE_DIRS})
 set(CPP_SOURCES_FOLDER "src/cc")
 
 if (WITH_CUDA)
- #TODO: I didn't had time to do/check this part
- #  set(CMAKE_CXX_FLAGS "-DNDEBUG ${CMAKE_CXX_FLAGS}")
- # find_package(CUDA)
- # cuda_add_library(inner_product SHARED inner_product_tests.cu)
- # cuda_add_library(inner_product_grad SHARED inner_product_grad.cc)
+  set(CMAKE_CXX_FLAGS "-DNDEBUG ${CMAKE_CXX_FLAGS}")
+  find_package(CUDA)
+  cuda_add_library(_upstride SHARED
+    ${CPP_SOURCES_FOLDER}/kernels/upstride_kernels.cu.cc
+    ${CPP_SOURCES_FOLDER}/ops/upstride_ops.cc)
 else()
   add_library(_upstride SHARED
     ${CPP_SOURCES_FOLDER}/kernels/upstride_kernels.cc

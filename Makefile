@@ -18,5 +18,5 @@ build: CMakeLists.txt
 
 
 # removes the build folder
-clean:
+distclean:
 	@rm -rf build
