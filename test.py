@@ -6,7 +6,7 @@ from tests.test import *
 
 class Test(unittest.TestCase):
     def leader_test(self):
-        print("")
+        print("TestGAMultiplication")
         TestGAMultiplication(self)
         
         print("TestQuaternionTF2Upstride")
