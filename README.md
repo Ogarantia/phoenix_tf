@@ -1,19 +1,25 @@
 ---
 title: Upstride engine in python implementing $\mathbb{G} \circ \mathbb{M}$
 author:
-date: \today
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 ---
 
 \newpage
-# Introduction
-This project implements Geometric Algebra (GA) in TensorFlow using Keras high-level API. It is compatible with latest release of tf 1 ($>=1.13$) and tf $2$.
 
-This document explains how to implement Geometric Algebra using TensorFlow. Its goal is to provide all the mathematical explanations and algorithm details to understand 
+# Introduction
+Welcome to the Phoenix Project !
+You are about to explore the wonderful word of the Geometric Algebra (GA) through this second version of the engine.
+It uses the Geometric over Matrices (GoM) isomorphism to take advantage of linear algebra libraries as well as nowadays computer powerfulness.  
+
+This project implements GA in TensorFlow using Keras high-level API and PyTorch. 
+The core of the engine is done in C++ and takes advantage of the most efficient math libraries for CPU and GPU.
+
+This document explains how to implement Geometric Algebra using TensorFlow/PyTorch. Its goal is to provide all the mathematical explanations and algorithm details to understand 
 how the code is written. 
 
 # Linear layer
 
-This section describes how to implement *any* linear layer in TensorFlow, for instance:
+This section describes how to implement *any* linear layer as a custom operation for TensorFlow, for instance:
 
   - Conv2D
   - Dense
@@ -70,7 +76,8 @@ the product $e_ie_j$ is defined by the structure of the GA, but in orthogonal ca
 This formula allows us to implement all linear layer for all geometrical algebra at the same time.
 
 ## Python implementation
-
+# TODO: add c++ implementation and how to plug one to each other.
+# Because now it's not a simple call to tensorflow operations.
 No more mathematics. Now we can code!
 
 so first, we need this function that compute the product of two blades: $e_ie_j = se_k$. It means we need to have a function that take $(i, j)$ as input and returns $(k, s)$:
@@ -246,6 +253,7 @@ This are some idea of things we could do in the future that wasn't done in v0.1
   - better gradient computation
   - optimize specific implementation (for instance quaternion)
   - improve BatchNormalization
+  - TF2Upstride and Upstride2TF should be functions that split the matrix into N matrices (and vice versa) to not have to perform it or compute adresses in each function.
 
 \newpage
 # Improvements from v0.1.1 to v0.1.2
@@ -413,3 +421,6 @@ rgb using real networks
 - Scaled down version of the real initializer needs to be explored as well. Before QInitializer
 we just used the default TF initializer without scaling down their variances to match for quaternion.
 This needs to be done to explore the effectiveness of QInitializer.
+
+## Algebra switch
+- In future we could want to use mixed network, so it could be great to not manage it through gloabl variables but using a context structure to be more able to manage computation on the fly.
