@@ -76,3 +76,14 @@ REGISTER_OP("UpstrideOutput")
         c->set_output(3, c->input(0));
         return Status::OK();
     });
+
+
+REGISTER_OP("UpstrideConv2D")
+    .Attr("T: {int32, float}")
+    .Input("input: T")
+    .Input("kernel: T")
+    .Output("ouput: T")
+    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+        c->set_output(0, c->input(0));
+        return Status::OK();
+    });

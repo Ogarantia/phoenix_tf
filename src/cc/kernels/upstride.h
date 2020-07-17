@@ -53,6 +53,27 @@ struct UpstrideOutputFunctor {
                     T* output_processed_4);
 };
 
+
+template <typename Device, typename T>
+struct UpstrideConv2DFunctor {
+    /**
+     * @brief 
+     * 
+     * @param inputShape 
+     * @param kernelShape 
+     * @param outputShape 
+     * @param input 
+     * @param kernel 
+     * @param ouput 
+     */
+    void operator()(const Shape& inputShape,
+                    const Shape& kernelShape,
+                    const Shape& outputShape, 
+                    const T* input, 
+                    const T* kernel, 
+                    T* ouput);
+};
+
 }  // namespace functor
 
 }  // namespace tensorflow
