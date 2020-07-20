@@ -19,20 +19,9 @@ Shape convertShape(const tensorflow::TensorShape& ts) {
     return s;
 }
 
-/**
- * @brief Tensorflow tensor representation inherit from upstride::tensor
- * 
- * @tparam T Tensorflow Tensor type
- */
-template <typename T>
-class TensorTF : public Tensor<T> {
-    static T* getOutputPtr(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int index) {
-        tensorflow::Tensor* tensor = nullptr;
-        //OP_REQUIRES_OK(context, context->allocate_output(index, shape, &tensor));
-        context->allocate_output(index, shape, &tensor);
-        return tensor->flat<T>().data();
-    }
 
+template <typename T>
+class InputTensorTF : public Tensor<const T> {
    public:
     /**
      * @brief Construct a new Tensor object from a Tensorflow input Tensor
@@ -40,9 +29,27 @@ class TensorTF : public Tensor<T> {
      * @param context Tensorflow context
      * @param idx Index of the tensor to get in the context
      */
-    TensorTF(tensorflow::OpKernelContext* context, const int idx) : Tensor<T>(convertShape(context->input(idx).shape()),
-                                                               context->input(idx).flat<T>().data()) {}
+    InputTensorTF(tensorflow::OpKernelContext* context, const int idx) : Tensor<const T>(convertShape(context->input(idx).shape()),
+                                                                                         context->input(idx).flat<T>().data()) {}
+};
 
+
+/**
+ * @brief Tensorflow tensor representation inherit from upstride::tensor
+ * 
+ * @tparam T Tensorflow Tensor type
+ */
+template <typename T>
+class OutputTensorTF : public Tensor<T> {
+    static T* getOutputPtr(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int index) {
+        tensorflow::Tensor* tensor = nullptr;
+        ::tensorflow::Status status(context->allocate_output(index, shape, &tensor));
+        if (!TF_PREDICT_TRUE(status.ok()))
+            throw std::runtime_error("Cannot allocate output tensor");
+        return tensor->flat<T>().data();
+    }
+
+   public:
     /**
      * @brief Wraps an output tensor of a Tensorflow operation in an upstride::tensor
      * 
@@ -50,9 +57,9 @@ class TensorTF : public Tensor<T> {
      * @param shape     Output tensor shape
      * @param idx       Operation output index
      */
-    TensorTF(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<T>(convertShape(shape),
-                                                                                                     getOutputPtr(context, shape, idx)) {}
+    OutputTensorTF(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<T>(convertShape(shape),
+                                                                                                                              getOutputPtr(context, shape, idx)) {}
 };
 
-}  // namespace tensorflow
+}  // namespace frontend_tf
 }  // namespace upstride

@@ -66,13 +66,13 @@ class Tensor {
     */
     Tensor(const Shape& sh, T* t) : shape(sh.getSize(), sh.getShapePtr()),
                                     tensor(t) {}
-
     /**
      * @brief Get the pointer to the Tensor object 
      * 
      * @return T* Pointer to tensor
      */
     T* getTensorPtr() { return tensor; }
+
     /**
      * @brief Get the Shape object
      * 

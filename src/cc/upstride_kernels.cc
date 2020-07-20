@@ -17,9 +17,9 @@ namespace upstride {
 // CPU specialization of actual computation.
 template <typename T>
 struct UpstrideConv2DFunctor<tensorflow::CPUDevice, T> {
-    void operator()(const Tensor<T>& input,
-                    const Tensor<T>& kernel,
-                    Tensor<T> output) {
+    void operator()(const Tensor<const T>& input,
+                    const Tensor<const T>& kernel,
+                    Tensor<T>& output) {
         //call oneDNN
         std::cout << " coucou c'est nous aussi!!! " << std::endl;
     }
@@ -56,10 +56,14 @@ class UpstrideConv2DOpKernel : public OpKernel {
                                                dimensions.out_cols, dimensions.out_depth);
 
         // allocate output tensor
+        using namespace upstride::frontend_tf;
+        OutputTensorTF<T> output(context, outShape);
+        
         upstride::UpstrideConv2DFunctor<Device, T>()(
-            upstride::frontend_tf::TensorTF<T>(context, INPUT_KERNEL_IDX),
-            upstride::frontend_tf::TensorTF<T>(context, INPUT_IMAGE_IDX),
-            upstride::frontend_tf::TensorTF<T>(context, outShape));
+            InputTensorTF<T>(context, INPUT_KERNEL_IDX),
+            InputTensorTF<T>(context, INPUT_IMAGE_IDX),
+            output
+        );
     }
 };
 

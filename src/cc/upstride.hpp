@@ -14,9 +14,9 @@ struct UpstrideConv2DFunctor {
      * @param kernel 
      * @param output 
      */
-    void operator()(const Tensor<T>& input,
-                    const Tensor<T>& kernel,
-                    Tensor<T> output);
+    void operator()(const Tensor<const T>& input,
+                    const Tensor<const T>& kernel,
+                    Tensor<T>& output);
 };
 
 }  // namespace upstride
