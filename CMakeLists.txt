@@ -23,21 +23,28 @@ if (${MACOSX} MATCHES "Darwin")
 endif()
 
 include_directories(${TENSORFLOW_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cc)
 
 set(CPP_SOURCES_FOLDER "src/cc")
-
 if (WITH_CUDA)
   set(CMAKE_CXX_FLAGS "-DNDEBUG ${CMAKE_CXX_FLAGS}")
   find_package(CUDA)
-  cuda_add_library(_upstride SHARED
-    ${CPP_SOURCES_FOLDER}/kernels/upstride_kernels.cu.cc
-    ${CPP_SOURCES_FOLDER}/ops/upstride_ops.cc)
+  set(EXTENSION "cu.cc")
 else()
-  add_library(_upstride SHARED
-    ${CPP_SOURCES_FOLDER}/kernels/upstride_kernels.cc
-    ${CPP_SOURCES_FOLDER}/ops/upstride_ops.cc)
+  set(EXTENSION "cc")
+endif()
+
+set(SOURCES ${SOURCES} 
+    ${CPP_SOURCES_FOLDER}/upstride_kernels.${EXTENSION}
+    ${CPP_SOURCES_FOLDER}/upstride_ops.cc
+)
+
+if(WITH_CUDA)
+  cuda_add_library(_upstride SHARED ${SOURCES})
+else()
+  add_library(_upstride SHARED ${SOURCES})
 endif()
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride_ops")
+  LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride")

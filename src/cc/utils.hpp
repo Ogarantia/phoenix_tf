@@ -54,7 +54,7 @@ class Shape {
  */
 template <typename T>
 class Tensor {
-    const Shape shapes;
+    const Shape shape;
     T* tensor;
 
    public:
@@ -79,6 +79,6 @@ class Tensor {
      * @return const Shape& 
      */
     const Shape& getShape() const { return shape; }
-}
+};
 
 }  // namespace upstride

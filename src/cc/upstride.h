@@ -1,6 +1,8 @@
 #ifndef KERNEL_UPSTRIDE_OPS_H_
 #define KERNEL_UPSTRIDE_OPS_H_
 
+#include "utils.hpp"
+
 namespace tensorflow {
 
 namespace functor {
@@ -66,9 +68,9 @@ struct UpstrideConv2DFunctor {
      * @param kernel 
      * @param ouput 
      */
-    void operator()(const Shape& inputShape,
-                    const Shape& kernelShape,
-                    const Shape& outputShape, 
+    void operator()(const upstride::Shape& inputShape,
+                    const upstride::Shape& outputShape, 
+                    const upstride::Shape& kernelShape,
                     const T* input, 
                     const T* kernel, 
                     T* ouput);

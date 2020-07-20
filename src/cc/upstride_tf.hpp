@@ -33,8 +33,8 @@ class TensorTF : protected Tensor<T> {
      * @param idx Index of the tensor to get in the context
      */
     TensorTF(OpKernelContext* context, const int idx) : Tensor(computeShape(context->input(idx).shape()),
-                                                               context->input(idx).flat<T>().data()) {
-    }
+                                                               context->input(idx).flat<T>().data()) 
+                                                    { }
 };
 
 }  // namespace tensorflow
