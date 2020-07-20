@@ -34,45 +34,56 @@ def learn_vector_component(x, channels=3):
     return x
 
 
+
 class TF2Upstride(Layer):
     """assume this function is called at the begining of the network. Put colors to imaginary parts and grayscale in real
     """
+    
+    @staticmethod    
+    def rgb_in_img(x: tf.Tensor):
+        red = tf.expand_dims(x[:, :, :, 0], -1)
+        green = tf.expand_dims(x[:, :, :, 1], -1)
+        blue = tf.expand_dims(x[:, :, :, 2], -1)
+        zeros = tf.zeros_like(red)
+        return tf.concat([zeros, red, green, blue], axis=0)
+    
+    @staticmethod
+    def gray_in_real_rgb_in_img(x: tf.Tensor):
+        red = tf.expand_dims(x[:, :, :, 0], -1)
+        green = tf.expand_dims(x[:, :, :, 1], -1)
+        blue = tf.expand_dims(x[:, :, :, 2], -1)
+        grayscale = tf.image.rgb_to_grayscale(x)
+        return tf.concat([grayscale, red, green, blue], axis=0)
+    
+    @staticmethod
+    def learn_multivector(x: tf.Tensor):
+        r = learn_vector_component(x, 3)
+        i = learn_vector_component(x, 3)
+        j = learn_vector_component(x, 3)
+        k = learn_vector_component(x, 3)
+        return tf.concat([r, i, j, k], axis=0)
+    
+    @staticmethod
+    def default_convert(x: tf.Tensor):
+        zeros = tf.zeros_like(x)
+        return tf.concat([x, zeros, zeros, zeros], axis=0)
 
     def __init__(self, strategy=''):
-        self.rgb_in_img = False
-        self.gray_in_real_rgb_in_img = False
-        self.learn_multivector = False
-        if strategy == "joint":
-            self.rgb_in_img = True
-        elif strategy == 'grayscale':
-            self.gray_in_real_rgb_in_img = True
-        elif strategy == 'learned':
-            self.learn_multivector = True
-        elif strategy != '':
+        STRATEGIES = {
+            'joint': TF2Upstride.rgb_in_img,
+            'grayscale': TF2Upstride.gray_in_real_rgb_in_img,
+            'learned' : TF2Upstride.learn_multivector,
+            '': TF2Upstride.default_convert,
+        }
+
+        try:
+            self.strategy = STRATEGIES[strategy]
+        except KeyError:
             raise ValueError(f"unknown strategy: {strategy}")
-
+        
     def __call__(self, x):
-        if self.rgb_in_img:
-            red = tf.expand_dims(x[:, :, :, 0], -1)
-            green = tf.expand_dims(x[:, :, :, 1], -1)
-            blue = tf.expand_dims(x[:, :, :, 2], -1)
-            zeros = tf.zeros_like(red)
-            return [zeros, red, green, blue]
-        elif self.gray_in_real_rgb_in_img:
-            red = tf.expand_dims(x[:, :, :, 0], -1)
-            green = tf.expand_dims(x[:, :, :, 1], -1)
-            blue = tf.expand_dims(x[:, :, :, 2], -1)
-            grayscale = tf.image.rgb_to_grayscale(x)
-            return [grayscale, red, green, blue]
-        elif self.learn_multivector:
-            r = learn_vector_component(x, 3)
-            i = learn_vector_component(x, 3)
-            j = learn_vector_component(x, 3)
-            k = learn_vector_component(x, 3)
-            return [r, i, j, k]
-
-        else:
-            return [x]
+        return self.strategy(x)
+            
 
 
 class Upstride2TF(Layer):

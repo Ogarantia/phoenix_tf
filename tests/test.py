@@ -8,7 +8,6 @@ from modules.upstride_tf.type2.tf.keras.utils import quaternion_mult1, quaternio
 from modules.upstride_tf.type2.tf.keras.layers import TF2Upstride as QTF2Upstride
 from modules.upstride_tf.type2.tf.keras.layers import BatchNormalizationQ
 
-
 class TestGAMultiplication(unittest.TestCase):
     def test_ga_multiply_get_index(self):
         s, index = _ga_multiply_get_index("123", "12")

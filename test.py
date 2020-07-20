@@ -3,29 +3,7 @@ import tensorflow as tf
 import numpy as np
 from modules.upstride_tf   import generic_layers
 from tests.test import *
-
-class Test(unittest.TestCase):
-    def leader_test(self):
-        print("TestGAMultiplication")
-        TestGAMultiplication(self)
-        
-        print("TestQuaternionTF2Upstride")
-        TestQuaternionTF2Upstride(self)
-        
-        print("TestQuaternionMult")
-        TestQuaternionMult(self)
-        
-        print("TestTF")
-        TestTF(self)
-        
-        print("TestType1")
-        TestType1(self)
-        
-        print("TestType2")
-        TestType2(self)
-        
-        print("TestType3")
-        TestType3(self)
+from src.python.upstride.type2.tf.keras.test_layers import TestType2LayersTF2Upstride
 
 if __name__ == "__main__":
     unittest.main()
