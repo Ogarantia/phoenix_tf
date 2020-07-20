@@ -15,29 +15,27 @@ generic_layers.geometrical_def = (3, 0, 0)
 # If you wish to overwrite some layers, please implements them here
 
 
-def learn_vector_component(x, channels=3):
-    """
-    Learning module taken from this paper (https://arxiv.org/pdf/1712.04604.pdf)
-    BN --> ReLU --> Conv --> BN --> ReLU --> Conv
-
-    :param x: input x
-    :param channels: number of channels
-    :return: leaned  multi - vector (could have multiple channels)
-    """
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Activation('relu')(x)
-    x = tf.keras.layers.Conv2D(channels, (3, 3), padding='same')(x)
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Activation('relu')(x)
-    x = tf.keras.layers.Conv2D(channels, (3, 3), padding='same')(x)
-
-    return x
-
-
-
 class TF2Upstride(Layer):
     """assume this function is called at the begining of the network. Put colors to imaginary parts and grayscale in real
     """
+
+    @staticmethod
+    def learn_vector_component(x, channels=3):
+        """
+        Learning module taken from this paper (https://arxiv.org/pdf/1712.04604.pdf)
+        BN --> ReLU --> Conv --> BN --> ReLU --> Conv
+
+        :param x: input x
+        :param channels: number of channels
+        :return: leaned  multi - vector (could have multiple channels)
+        """
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Activation('relu')(x)
+        x = tf.keras.layers.Conv2D(channels, (3, 3), padding='same')(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Activation('relu')(x)
+        x = tf.keras.layers.Conv2D(channels, (3, 3), padding='same')(x)
+        return x
     
     @staticmethod    
     def rgb_in_img(x: tf.Tensor):
@@ -57,10 +55,10 @@ class TF2Upstride(Layer):
     
     @staticmethod
     def learn_multivector(x: tf.Tensor):
-        r = learn_vector_component(x, 3)
-        i = learn_vector_component(x, 3)
-        j = learn_vector_component(x, 3)
-        k = learn_vector_component(x, 3)
+        r = TF2Upstride.learn_vector_component(x, 3)
+        i = TF2Upstride.learn_vector_component(x, 3)
+        j = TF2Upstride.learn_vector_component(x, 3)
+        k = TF2Upstride.learn_vector_component(x, 3)
         return tf.concat([r, i, j, k], axis=0)
     
     @staticmethod
