@@ -47,4 +47,4 @@ endif()
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride")
+  LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride/type2/tf/keras")

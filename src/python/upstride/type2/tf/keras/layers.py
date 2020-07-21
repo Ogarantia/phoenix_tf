@@ -1,12 +1,19 @@
 from typing import Dict
+
+from tensorflow.keras import initializers
+from tensorflow.keras.layers import Layer
+from tensorflow.python.framework import load_library
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.keras.layers import Layer
-from tensorflow.keras import initializers
+from tensorflow.python.platform import resource_loader
+
 from .... import generic_layers
+from ....generic_convolution import GenericConv2D
 from ....generic_layers import *
-from .convolutional import Conv2D, DepthwiseConv2D
+from .convolutional import DepthwiseConv2D
 from .dense import Dense
+
+upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('_upstride.so'))
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
@@ -26,11 +33,11 @@ class TF2Upstride(Layer):
     Learning module taken from this paper (https://arxiv.org/pdf/1712.04604.pdf)
     BN --> ReLU --> Conv --> BN --> ReLU --> Conv
 
-		Args:
-    	x: input x
-    	channels: number of channels
+                Args:
+        x: input x
+        channels: number of channels
     Returns:
-			leaned  multi - vector (could have multiple channels)
+                        leaned  multi - vector (could have multiple channels)
     """
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
@@ -101,6 +108,45 @@ class Upstride2TF(Layer):
       return tf.concat(x, -1)
     else:
       return x[0]
+
+
+class Conv2D(GenericConv2D):
+  def __init__(self, filters,
+               kernel_size,
+               strides=(1, 1),
+               padding='valid',
+               data_format=None,
+               dilation_rate=(1, 1),
+               groups=1,
+               activation=None,
+               use_bias=True,
+               kernel_initializer='glorot_uniform',
+               bias_initializer='zeros',
+               kernel_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               kernel_constraint=None,
+               bias_constraint=None,
+               **kwargs):
+    super().__init__(filters,
+                     kernel_size,
+                     strides,
+                     padding,
+                     data_format,
+                     dilation_rate,
+                     groups,
+                     activation,
+                     use_bias,
+                     kernel_initializer,
+                     bias_initializer,
+                     kernel_regularizer,
+                     bias_regularizer,
+                     activity_regularizer,
+                     kernel_constraint,
+                     bias_constraint,
+                     **kwargs)
+    self.upstride_type_dim = 4
+    self.upstride_conv_op = upstride_ops.upstride_conv2d
 
 
 class MaxNormPooling2D(Layer):
