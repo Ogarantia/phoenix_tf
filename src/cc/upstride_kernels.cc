@@ -2,9 +2,9 @@
 #define EIGEN_USE_GPU
 #endif  // GOOGLE_CUDA
 
+#include "tensorflow_includes.hpp"
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
-#include "tensorflow_includes.hpp"
 
 namespace tensorflow {
 
@@ -36,34 +36,47 @@ class UpstrideConv2DOpKernel : public OpKernel {
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_KERNEL_IDX = 1;  //!< index of the input tensor containing the convolution kernel
 
-    tensorflow::Conv2DParameters params;  //!< bunch of Conv2D parameters passed from the frontend
+    upstride::DataFormat dataFormat;
+    upstride::Padding paddingPreset;
+    upstride::IntPair padding;
+    upstride::IntPair stride;
+    upstride::IntPair dilation;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
         // fetch parameters
-        OP_REQUIRES_OK(context, tensorflow::InitConv2DParameters(context, &params));
+        context->GetAttr<int>("strides", stride);
+        context->GetAttr<int>("dilations", dilation);
+        if (context->HasAttr("explicit_paddings"))
+            context->GetAttr<int>("explicit_paddings", padding);
+
+        std::string paddingStr;
+        context->GetAttr("padding", &paddingStr);
+        paddingPreset =  upstride::paddingFromString(paddingStr);
+
+        std::string dataFormatStr;
+        context->GetAttr("data_format", &dataFormatStr);
+        dataFormat = upstride::dataFormatFromString(dataFormatStr);
     }
 
     void Compute(OpKernelContext* context) override {
         std::cout << " coucou c'est nous " << std::endl;
 
-        // compute output shape
-        tensorflow::Conv2DDimensions dimensions;
-        OP_REQUIRES_OK(context,
-                       ComputeConv2DDimension(params, context->input(INPUT_IMAGE_IDX), context->input(INPUT_KERNEL_IDX), &dimensions));
+        using namespace upstride::frontend_tf;
+        InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
+        InputTensorTF<T> kernel(context, INPUT_KERNEL_IDX);
 
-        TensorShape outShape = ShapeFromFormat(params.data_format, dimensions.batch, dimensions.out_rows,
-                                               dimensions.out_cols, dimensions.out_depth);
+        // compute output shape
+        TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
+            4, dataFormat,
+            input.getShape(), kernel.getShape(),
+            paddingPreset, padding, stride, dilation
+        ));
 
         // allocate output tensor
-        using namespace upstride::frontend_tf;
         OutputTensorTF<T> output(context, outShape);
-        
-        upstride::UpstrideConv2DFunctor<Device, T>()(
-            InputTensorTF<T>(context, INPUT_KERNEL_IDX),
-            InputTensorTF<T>(context, INPUT_IMAGE_IDX),
-            output
-        );
+
+        upstride::UpstrideConv2DFunctor<Device, T>()(input, kernel, output);
     }
 };
 

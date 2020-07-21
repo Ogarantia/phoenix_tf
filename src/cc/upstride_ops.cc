@@ -6,4 +6,10 @@ REGISTER_OP("UpstrideConv2D")
     .Input("input: T")
     .Input("kernel: T")
     .Output("output: T")
-    .SetShapeFn(tensorflow::shape_inference::Conv2DShapeWithExplicitPadding);
+    .Attr("strides: list(int)")
+    .Attr(::tensorflow::GetPaddingAttrString())
+    .Attr(::tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("dilations: list(int) = [1, 1, 1, 1]")
+    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+      return ::tensorflow::Status::OK();
+    });
