@@ -34,28 +34,28 @@ template <typename Device, typename T>
 class UpstrideConv2DOpKernel : public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
-        INPUT_KERNEL_IDX = 1;  //!< index of the input tensor containing the convolution kernel
+        INPUT_FILTER_IDX = 1;  //!< index of the input tensor containing the filter
 
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
-    upstride::IntPair padding;
-    upstride::IntPair stride;
-    upstride::IntPair dilation;
+    std::vector<int32> explicitPadding;
+    std::vector<int32> stride;
+    std::vector<int32> dilation;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
         // fetch parameters
-        context->GetAttr<int>("strides", stride);
-        context->GetAttr<int>("dilations", dilation);
+        OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
+        OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
         if (context->HasAttr("explicit_paddings"))
-            context->GetAttr<int>("explicit_paddings", padding);
+            OP_REQUIRES_OK(context, context->GetAttr("explicit_paddings", &explicitPadding));
 
         std::string paddingStr;
-        context->GetAttr("padding", &paddingStr);
-        paddingPreset =  upstride::paddingFromString(paddingStr);
+        OP_REQUIRES_OK(context, context->GetAttr("padding", &paddingStr));
+        paddingPreset = upstride::paddingFromString(paddingStr);
 
         std::string dataFormatStr;
-        context->GetAttr("data_format", &dataFormatStr);
+        OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
     }
 
@@ -63,20 +63,27 @@ class UpstrideConv2DOpKernel : public OpKernel {
         std::cout << " coucou c'est nous " << std::endl;
 
         using namespace upstride::frontend_tf;
-        InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
-        InputTensorTF<T> kernel(context, INPUT_KERNEL_IDX);
 
-        // compute output shape
-        TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
-            4, dataFormat,
-            input.getShape(), kernel.getShape(),
-            paddingPreset, padding, stride, dilation
-        ));
+        try {
+            // grab inputs
+            InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
+            InputTensorTF<T> filter(context, INPUT_FILTER_IDX);
 
-        // allocate output tensor
-        OutputTensorTF<T> output(context, outShape);
+            // compute output shape
+            TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
+                4, dataFormat,
+                input.getShape(), filter.getShape(),
+                paddingPreset, explicitPadding, stride, dilation));
 
-        upstride::UpstrideConv2DFunctor<Device, T>()(input, kernel, output);
+            // allocate output tensor
+            OutputTensorTF<T> output(context, outShape);
+
+            // execute the operation
+            upstride::UpstrideConv2DFunctor<Device, T>()(input, filter, output);
+        }
+        catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what())); 
+        }
     }
 };
 

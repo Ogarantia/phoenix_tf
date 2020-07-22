@@ -1,4 +1,5 @@
 #include "tensorflow_includes.hpp"
+#include "utils.hpp"
 
 
 REGISTER_OP("UpstrideConv2D")
@@ -11,5 +12,6 @@ REGISTER_OP("UpstrideConv2D")
     .Attr(::tensorflow::GetConvnetDataFormatAttrString())
     .Attr("dilations: list(int) = [1, 1, 1, 1]")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-      return ::tensorflow::Status::OK();
+      
+      return ::tensorflow::errors::Unimplemented("");
     });
