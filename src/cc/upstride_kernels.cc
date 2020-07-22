@@ -47,12 +47,12 @@ class UpstrideConv2DOpKernel : public OpKernel {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
-        if (context->HasAttr("explicit_paddings"))
-            OP_REQUIRES_OK(context, context->GetAttr("explicit_paddings", &explicitPadding));
 
         std::string paddingStr;
         OP_REQUIRES_OK(context, context->GetAttr("padding", &paddingStr));
         paddingPreset = upstride::paddingFromString(paddingStr);
+        if (paddingPreset == upstride::Padding::EXPLICIT)
+            OP_REQUIRES_OK(context, context->GetAttr("explicit_paddings", &explicitPadding));
 
         std::string dataFormatStr;
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));

@@ -193,11 +193,11 @@ Shape computeConvOutputSize(const int typeDim, const DataFormat dataFormat, cons
 
 namespace std {
 /**
- * @brief Overloaded "<<" operator to be able to write out std::vectors to std stream. A very handy thing.
+ * @brief Overloaded "<<" operator to write out std::vectors to an std::stream. A very handy thing.
  * @tparam T    vector datatype
  * @param str   The output stream
  * @param vec   The vector to write out
- * @return a reference to str by convention
+ * @return a reference to the output stream, by convention.
  */
 template <typename T>
 inline std::ostream& operator<<(std::ostream& str, const std::vector<T>& vec) {
@@ -207,6 +207,25 @@ inline std::ostream& operator<<(std::ostream& str, const std::vector<T>& vec) {
         str << "\b\b]";
     } else
         str << "[]";
+    return str;
+}
+
+
+/**
+ * @brief Overloaded "<<" to write out an upstride::shape to an std::stream. A very handy thing.
+ * @param str       The output stream
+ * @param shape     The instance of upstride::Shape to write out
+ * @return a reference to the output stream, by convention.
+ */
+inline std::ostream& operator<<(std::ostream& str, const upstride::Shape& shape) {
+    if (shape.getSize() > 0) {
+        str << '[';
+        for (int i = 0; i < shape.getSize(); ++i)
+            str << shape[i] << ", ";
+        str << "\b\b]";
+    } else
+        str << "[]";
+
     return str;
 }
 }  // namespace std

@@ -7,24 +7,18 @@
 
 using namespace upstride;
 
-Padding upstride::paddingFromString(std::string paddingString) {
-    if (paddingString == "SAME")
-        return Padding::SAME;
-    if (paddingString == "VALID")
-        return Padding::VALID;
-    if (paddingString == "EXPLICIT")
-        return Padding::EXPLICIT;
-    throw std::invalid_argument("Invalid padding encountered: " + paddingString);
-}
 
-DataFormat upstride::dataFormatFromString(std::string dataFormatString) {
-    if (dataFormatString == "NHWC")
-        return DataFormat::NHWC;
-    if (dataFormatString == "NCHW")
-        return DataFormat::NCHW;
-    throw std::invalid_argument("Invalid data format encountered: " + dataFormatString);
-}
-
+/**
+ * @brief Computes output size along a single dimension of an operation that samples the input with strided/dilated patches.
+ * @param inputSize         The input size
+ * @param filterSize        The patch size
+ * @param dilation          The patch dilation
+ * @param stride            The patch stride
+ * @param padding           Input padding preset
+ * @param paddingBefore     Zero padding at the beginning; in case of explicit padding the value is taken as input, otherwise it is computed
+ * @param paddingAfter      Zero padding at the end; in case of explicit padding the value is taken as input, otherwise it is computed
+ * @return number of samples resulting from the operation.
+ */
 int computeWindowedOutputSizeAndPadding(int inputSize, int filterSize,
                                         int dilation, int stride,
                                         Padding padding,
@@ -55,11 +49,29 @@ int computeWindowedOutputSizeAndPadding(int inputSize, int filterSize,
     return outputSize;
 }
 
+Padding upstride::paddingFromString(std::string paddingString) {
+    if (paddingString == "SAME")
+        return Padding::SAME;
+    if (paddingString == "VALID")
+        return Padding::VALID;
+    if (paddingString == "EXPLICIT")
+        return Padding::EXPLICIT;
+    throw std::invalid_argument("Invalid padding encountered: " + paddingString);
+}
+
+DataFormat upstride::dataFormatFromString(std::string dataFormatString) {
+    if (dataFormatString == "NHWC")
+        return DataFormat::NHWC;
+    if (dataFormatString == "NCHW")
+        return DataFormat::NCHW;
+    throw std::invalid_argument("Invalid data format encountered: " + dataFormatString);
+}
+
 Shape upstride::computeConvOutputSize(const int typeDim, const DataFormat dataFormat, const Shape& inputShape, const Shape& filterShape,
                                       Padding paddingPreset, const std::vector<int32_t>& explicitPadding, const std::vector<int32_t>& stride, const std::vector<int32_t>& dilation) {
     // Assumptions on the filter dimensions are as follows:
-    const int filterWidthDim = 0;
-    const int filterHeightDim = 1;
+    const int filterWidthDim = 1;
+    const int filterHeightDim = 2;
     const int filterInChannelDim = 3;
     const int filterOutChannelDim = 4;
 
@@ -73,8 +85,9 @@ Shape upstride::computeConvOutputSize(const int typeDim, const DataFormat dataFo
     if (inputShape.depth(dataFormat) % filterShape[filterInChannelDim] != 0)
         throw std::invalid_argument("Filter channels number/input channels number mismatch");
 
-    // Setting the last output dimension
+    // Set up the resulting shape
     Shape outputShape(4);
+    outputShape[0] = inputShape[0];
     outputShape.depth(dataFormat) = filterShape[filterOutChannelDim];
 
     // init padding

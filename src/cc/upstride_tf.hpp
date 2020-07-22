@@ -6,28 +6,28 @@ namespace upstride {
 namespace frontend_tf {
 
 /**
-* @brief Convert a TensorShape into an upstride::Shape 
-* 
-* @param ts TensorShape
+* @brief Convert a TensorShape into an upstride::Shape
+* @param ts the input shape
 * @return Shape upstride::Shape
 */
 Shape toUpstrideShape(const tensorflow::TensorShape& ts) {
     Shape s(ts.dims());
-    for (int i = 0; i < ts.dims(); ++i) {
+    for (int i = 0; i < ts.dims(); ++i)
         s[i] = ts.dim_size(i);
-    }
     return s;
 }
 
-
+/**
+ * @brief Converts upstride::Shape to a TensorShape
+ * @param inShape the input shape
+ * @return a corresponding tensorflow::TensorShape 
+ */
 tensorflow::TensorShape toTensorflowShape(const Shape& inShape) {
     tensorflow::TensorShape outShape;
-    for (int i = 0; i < inShape.getSize(); ++i) {
+    for (int i = 0; i < inShape.getSize(); ++i)
         outShape.AddDim(inShape[i]);
-    }
     return outShape;
 }
-
 
 template <typename T>
 class InputTensorTF : public Tensor<const T> {
@@ -41,7 +41,6 @@ class InputTensorTF : public Tensor<const T> {
     InputTensorTF(tensorflow::OpKernelContext* context, const int idx) : Tensor<const T>(toUpstrideShape(context->input(idx).shape()),
                                                                                          context->input(idx).flat<T>().data()) {}
 };
-
 
 /**
  * @brief Tensorflow tensor representation inherit from upstride::tensor
