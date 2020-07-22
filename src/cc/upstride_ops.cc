@@ -9,10 +9,13 @@ REGISTER_OP("UpstrideConv2D")
     .Output("output: T")
     .Attr("strides: list(int)")
     .Attr("dilations: list(int) = [1, 1, 1, 1]")
+#ifdef TENSORFLOW_VERSION_1
+    .Attr(::tensorflow::GetPaddingAttrString())
+#else
     .Attr(::tensorflow::GetPaddingAttrStringWithExplicit())
     .Attr(::tensorflow::GetExplicitPaddingsAttrString())
+#endif
     .Attr(::tensorflow::GetConvnetDataFormatAttrString())
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-      
       return ::tensorflow::errors::Unimplemented("");
     });

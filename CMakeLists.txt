@@ -10,6 +10,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 endif()
 
 # get tensorflow dirs and flags, see https://www.tensorflow.org/how_tos/adding_an_op/
+execute_process(COMMAND python3 -c "import tensorflow; print(tensorflow.__version__[0], end='')" OUTPUT_VARIABLE TENSORFLOW_VERSION)
 execute_process(COMMAND python3 -c "import tensorflow; print(tensorflow.sysconfig.get_include(), end='')" OUTPUT_VARIABLE TENSORFLOW_INCLUDE_DIRS)
 execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_compile_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_COMPILE_FLAGS)
 execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_link_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_LINK_FLAGS)
@@ -19,6 +20,12 @@ set(COMMON_FLAGS "-fPIC -O2 -Wfatal-errors")
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} -I${TENSORFLOW_INCLUDE_DIRS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 if (${MACOSX} MATCHES "Darwin")
   set(CMAKE_CXX_FLAGS "-undefined dynamic_lookup ${CMAKE_CXX_FLAGS}")
+endif()
+
+# TF 1.x support by a preprocessor directive
+if (TENSORFLOW_VERSION STREQUAL "1")
+  message("-- Using Tensorflow 1.x")
+  set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
 endif()
 
 # specify paths to include directories

@@ -80,9 +80,8 @@ class UpstrideConv2DOpKernel : public OpKernel {
 
             // execute the operation
             upstride::UpstrideConv2DFunctor<Device, T>()(input, filter, output);
-        }
-        catch (std::exception& ex) {
-            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what())); 
+        } catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
     }
 };

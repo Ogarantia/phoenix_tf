@@ -7,7 +7,6 @@
 
 using namespace upstride;
 
-
 /**
  * @brief Computes output size along a single dimension of an operation that samples the input with strided/dilated patches.
  * @param inputSize         The input size

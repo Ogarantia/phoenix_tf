@@ -210,7 +210,6 @@ inline std::ostream& operator<<(std::ostream& str, const std::vector<T>& vec) {
     return str;
 }
 
-
 /**
  * @brief Overloaded "<<" to write out an upstride::shape to an std::stream. A very handy thing.
  * @param str       The output stream
