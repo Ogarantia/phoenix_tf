@@ -147,7 +147,8 @@ class Tensor {
      * 
      * @return T* Pointer to tensor
      */
-    T* getTensorPtr() { return tensor; }
+    T* getDataPtr() { return tensor; }
+    const T* getDataPtr() const { return tensor; }
 
     /**
      * @brief Get the Shape object

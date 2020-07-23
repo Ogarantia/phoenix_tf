@@ -50,8 +50,7 @@ include_directories(${TENSORFLOW_INCLUDE_DIRS})
 include_directories(${ONEDNN_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cc)
 
-
-link_libraries(${ONEDNN_LIB_DIRS})
+link_libraries(${ONEDNN_LIB_DIRS}/libdnnl.so)
 
 # list source code files
 set(CPP_SOURCES_FOLDER "src/cc")

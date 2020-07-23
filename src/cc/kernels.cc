@@ -51,7 +51,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
 
             // compute output shape
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
-                4, dataFormat,
+                1, dataFormat,
                 input.getShape(), filter.getShape(),
                 paddingPreset, explicitPadding, stride, dilation));
 
@@ -59,7 +59,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            upstride::UpstrideConv2DFunctor<Device, T>()(input, filter, output);
+            upstride::UpstrideConv2DFunctor<Device, T>()(input, filter, output, dataFormat);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
