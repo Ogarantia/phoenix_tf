@@ -3,57 +3,14 @@ cmake_minimum_required(VERSION 2.8)
 project(UpStride)
 
 option(BUILD_TESTS "Build tests" ON)
-option(ONEDNN_INCLUDE_DIRS "With OneDNN includes" "")
-option(ONEDNN_LIB_DIRS "With OneDNN libs" "" )
 option(WITH_CUDA "With CUDA" OFF)
-
-
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    set(MACOSX TRUE)
-endif()
-
-# get tensorflow dirs and flags, see https://www.tensorflow.org/how_tos/adding_an_op/
-execute_process(COMMAND python3 -c "import tensorflow; print(tensorflow.__version__[0], end='')" OUTPUT_VARIABLE TENSORFLOW_VERSION)
-execute_process(COMMAND python3 -c "import tensorflow; print(tensorflow.sysconfig.get_include(), end='')" OUTPUT_VARIABLE TENSORFLOW_INCLUDE_DIRS)
-execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_compile_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_COMPILE_FLAGS)
-execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_link_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_LINK_FLAGS)
-
-set(ONEDNN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules/dnnl_lnx_1.5.0_cpu_gomp/include")
-set(ONEDNN_LIB_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules/dnnl_lnx_1.5.0_cpu_gomp/lib")
+option(WITH_ONEDNN "With oneDNN" ON)
 
 message("-- BUILD_TESTS: ${BUILD_TESTS}")
+message("-- WITH_ONEDNN: ${WITH_ONEDNN}")
 message("-- WITH_CUDA: ${WITH_CUDA}")
-message("-- TENSORFLOW_VERSION: ${TENSORFLOW_VERSION}")
-message("-- TENSORFLOW_INCLUDE_DIRS: ${TENSORFLOW_INCLUDE_DIRS}")
-message("-- TENSORFLOW_COMPILE_FLAGS: ${TENSORFLOW_COMPILE_FLAGS}")
-message("-- TENSORFLOW_LINK_FLAGS: ${TENSORFLOW_LINK_FLAGS}")
-message("-- ONEDNN_INCLUDE_DIRS: ${ONEDNN_INCLUDE_DIRS}")
-message("-- ONEDNN_LIB_DIRS: ${ONEDNN_LIB_DIRS}")
 
-
-# setup compilation flags; C++11 required for tensorflow
-set(COMMON_FLAGS "-fPIC -O2 -Wfatal-errors")
-set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
-
-if (${MACOSX} MATCHES "Darwin")
-  set(CMAKE_CXX_FLAGS "-undefined dynamic_lookup ${CMAKE_CXX_FLAGS}")
-endif()
-
-# TF 1.x support by a preprocessor directive
-if (TENSORFLOW_VERSION STREQUAL "1")
-  message("-- Using Tensorflow 1.x")
-  set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
-endif()
-
-# specify paths to include directories
-include_directories(${TENSORFLOW_INCLUDE_DIRS})
-include_directories(${ONEDNN_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cc)
-
-link_libraries(${ONEDNN_LIB_DIRS}/libdnnl.so)
-
-# list source code files
-set(CPP_SOURCES_FOLDER "src/cc")
+# CUDA-related stuff
 if (WITH_CUDA)
   set(CMAKE_CXX_FLAGS "-DNDEBUG ${CMAKE_CXX_FLAGS}")
   find_package(CUDA)
@@ -62,12 +19,19 @@ else()
   set(EXTENSION "cc")
 endif()
 
+# list source code files
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cc)
+set(CPP_SOURCES_FOLDER "src/cc")
 set(SOURCES ${SOURCES} 
     ${CPP_SOURCES_FOLDER}/kernels.${EXTENSION}
     ${CPP_SOURCES_FOLDER}/ops.cc
     ${CPP_SOURCES_FOLDER}/utils.cc
-    ${CPP_SOURCES_FOLDER}/onednn/conv2d.cc
 )
+if (WITH_ONEDNN)
+  set(SOURCES ${SOURCES}
+      ${CPP_SOURCES_FOLDER}/onednn/conv2d.cc
+  )
+endif()
 
 # add the library
 if(WITH_CUDA)
@@ -79,6 +43,53 @@ endif()
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride/type2/tf/keras")
+
+
+#######################
+#    ONEDNN SETUP     #
+#######################
+
+# bring up oneDNN
+if (WITH_ONEDNN)
+  set(ONEDNN_SUBMODULE_PATH "thirdparty/onednn")
+  option(DNNL_BUILD_TESTS "Build DNLL tests" OFF)
+  option(DNNL_BUILD_EXAMPLES "Build DNLL examples" OFF)
+  add_subdirectory(${ONEDNN_SUBMODULE_PATH})
+  target_include_directories(_upstride PRIVATE "${ONEDNN_SUBMODULE_PATH}/include"})
+  target_link_libraries(_upstride dnnl)
+endif()
+
+
+########################
+#   TENSORFLOW SETUP   #
+########################
+
+# get tensorflow dirs and flags, see https://www.tensorflow.org/how_tos/adding_an_op/
+execute_process(COMMAND python3 -c "import tensorflow; print(tensorflow.__version__[0], end='')" OUTPUT_VARIABLE TENSORFLOW_VERSION)
+execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_compile_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_COMPILE_FLAGS)
+execute_process(COMMAND python3 -c "import tensorflow as tf; print(' '.join(tf.sysconfig.get_link_flags()), end='')" OUTPUT_VARIABLE TENSORFLOW_LINK_FLAGS)
+
+message("-- BUILD_TESTS: ${BUILD_TESTS}")
+message("-- WITH_ONEDNN: ${WITH_ONEDNN}")
+message("-- WITH_CUDA: ${WITH_CUDA}")
+message("-- TENSORFLOW_VERSION: ${TENSORFLOW_VERSION}")
+message("-- TENSORFLOW_COMPILE_FLAGS: ${TENSORFLOW_COMPILE_FLAGS}")
+message("-- TENSORFLOW_LINK_FLAGS: ${TENSORFLOW_LINK_FLAGS}")
+
+# setup compilation flags; C++11 required for tensorflow
+set(COMMON_FLAGS "-fPIC -O2 -Wfatal-errors")
+set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  set(CMAKE_CXX_FLAGS "-undefined dynamic_lookup ${CMAKE_CXX_FLAGS}")
+endif()
+
+# enable TF 1.x support by a preprocessor directive
+if (TENSORFLOW_VERSION STREQUAL "1")
+  message("-- Using Tensorflow 1.x")
+  set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
+endif()
+
 
 
 #if (BUILD_TESTS)

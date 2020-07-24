@@ -8,7 +8,7 @@ default:
 	@make -s build/*.so
 
 build/*.so : build $(shell find $(SOURCE_PATH) -type f)
-	@cd build .. && make
+	@cd build .. && make -j7
 
 
 # generates Makefile using CMake
