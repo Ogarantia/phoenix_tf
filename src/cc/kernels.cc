@@ -11,7 +11,7 @@ namespace tensorflow {
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
-class UpstrideConv2DOpKernel : public OpKernel {
+class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2DFunctor<Device, T> {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1;  //!< index of the input tensor containing the filter
@@ -40,8 +40,6 @@ class UpstrideConv2DOpKernel : public OpKernel {
     }
 
     void Compute(OpKernelContext* context) override {
-        std::cout << " coucou c'est nous " << std::endl;
-
         using namespace upstride::frontend_tf;
 
         try {
@@ -59,7 +57,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            upstride::UpstrideConv2DFunctor<Device, T>()(input, filter, output, dataFormat);
+            (*this)(input, filter, output, dataFormat);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }

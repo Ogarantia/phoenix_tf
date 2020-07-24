@@ -68,21 +68,29 @@ DataFormat upstride::dataFormatFromString(std::string dataFormatString) {
 
 Shape upstride::computeConvOutputSize(const int typeDim, const DataFormat dataFormat, const Shape& inputShape, const Shape& filterShape,
                                       Padding paddingPreset, const std::vector<int32_t>& explicitPadding, const std::vector<int32_t>& stride, const std::vector<int32_t>& dilation) {
-    // Assumptions on the filter dimensions are as follows:
-    const int filterWidthDim = 1;
-    const int filterHeightDim = 2;
-    const int filterInChannelDim = 3;
-    const int filterOutChannelDim = 4;
-
     // Perform shape checks
     if (inputShape.getSize() != 4)
         throw std::invalid_argument("Four-dimensional input tensor expected");
-    if (filterShape.getSize() != 5)
-        throw std::invalid_argument("Five-dimensional filter tensor expected");
-    if (filterShape[0] != typeDim)
-        throw std::invalid_argument("First filter dimension mismatch, got " + std::to_string(filterShape[0]));
-    if (inputShape.depth(dataFormat) % filterShape[filterInChannelDim] != 0)
-        throw std::invalid_argument("Filter channels number/input channels number mismatch");
+    if (typeDim > 1) {
+        if (filterShape.getSize() != 5)
+            throw std::invalid_argument("Five-dimensional filter tensor expected");
+        if (filterShape[0] != typeDim)
+            throw std::invalid_argument("First filter dimension mismatch, got " + std::to_string(filterShape[0]));
+    }
+    else
+        if (filterShape.getSize() != 4)
+            throw std::invalid_argument("Four-dimensional filter tensor expected");
+
+    // For scalar tensors (typeDim == 1), work with usual 4D filters. Otherwise the filter tensor is 5D.
+    //fixme: heavily disabled for testing due to oneDNN specificities
+    const int firstFilterDim = typeDim > 1 ? 1 : 0;
+    const int filterWidthDim = firstFilterDim +3;
+    const int filterHeightDim = firstFilterDim + 2;
+    const int filterInChannelDim = firstFilterDim + 1;
+    const int filterOutChannelDim = firstFilterDim + 0;
+
+    /*if (inputShape.depth(dataFormat) % filterShape[filterInChannelDim] != 0)
+        throw std::invalid_argument("Filter channels number/input channels number mismatch");*/
 
     // Set up the resulting shape
     Shape outputShape(4);

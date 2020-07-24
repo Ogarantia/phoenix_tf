@@ -1,4 +1,6 @@
 #pragma once
+#include <unordered_map>
+
 #include "dnnl.hpp"
 #include "upstride.hpp"
 
@@ -44,28 +46,10 @@ class Context : public upstride::Context {
      */
     const dnnl::engine& getEngine() const { return oneEngine; }
     dnnl::engine& getEngine() { return oneEngine; }
-};
 
-/**
- * @brief Client memory to oneDNN memory wrapping
- */
-class Memory {
-    dnnl::memory::desc md;
-    dnnl::memory mem;
-
-   public:
-    template <typename T>
-    Memory(const Tensor<const T>& tensor, DataFormat df, const Context& context) : md(dnnl::memory::dims(tensor.getShape().getShapePtr(), tensor.getShape().getShapePtr() + tensor.getShape().getSize()),
-                                                                                      getDataType<T>(),
-                                                                                      convertDataFormatToFormatTag(df)),
-                                                                                   mem(md, context.getEngine(), const_cast<float*>(tensor.getDataPtr())) {
-    }
-
-    template <typename T>
-    Memory(Tensor<T>& tensor, DataFormat df, const Context& context) : md(dnnl::memory::dims(tensor.getShape().getShapePtr(), tensor.getShape().getShapePtr() + tensor.getShape().getSize()),
-                                                                          getDataType<T>(),
-                                                                          convertDataFormatToFormatTag(df)),
-                                                                       mem(md, context.getEngine(), tensor.getDataPtr()) {
+    void execute(dnnl::primitive& prim, std::unordered_map<int, dnnl::memory>&& args) {
+        prim.execute(oneStream, args);
+        oneStream.wait();
     }
 };
 
