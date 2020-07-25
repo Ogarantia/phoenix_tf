@@ -8,7 +8,7 @@ default:
 	@make -s build/*.so
 
 build/*.so : build $(shell find $(SOURCE_PATH) -type f)
-	@cd build .. && make
+	@cd build .. && make VERBOSE=1
 
 
 # generates Makefile using CMake
@@ -20,6 +20,9 @@ build: CMakeLists.txt
 # removes the build folder
 distclean:
 	@rm -rf build
+# Clean the build folder
+clean:
+	@cd build && make clean
 
 # build docker with compilation environment
 build_dev_docker:

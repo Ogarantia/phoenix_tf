@@ -7,7 +7,6 @@ option(ONEDNN_INCLUDE_DIRS "With OneDNN includes" "")
 option(ONEDNN_LIB_DIRS "With OneDNN libs" "" )
 option(WITH_CUDA "With CUDA" OFF)
 
-
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(MACOSX TRUE)
 endif()
@@ -63,10 +62,10 @@ else()
 endif()
 
 set(SOURCES ${SOURCES} 
-    ${CPP_SOURCES_FOLDER}/kernels.${EXTENSION}
-    ${CPP_SOURCES_FOLDER}/ops.cc
-    ${CPP_SOURCES_FOLDER}/utils.cc
-    ${CPP_SOURCES_FOLDER}/onednn/conv2d.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/${CPP_SOURCES_FOLDER}/kernels.${EXTENSION}
+    ${CMAKE_CURRENT_SOURCE_DIR}/${CPP_SOURCES_FOLDER}/ops.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/${CPP_SOURCES_FOLDER}/utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/${CPP_SOURCES_FOLDER}/onednn/conv2d.cc
 )
 
 # add the library
@@ -78,10 +77,10 @@ endif()
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "../src/python/upstride/type2/tf/keras")
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/python/upstride/type2/tf/keras")
 
 
-#if (BUILD_TESTS)
-#  enable_testing()
-#  add_subdirectory(tests/cpp_tests/)
-#endif()
+if (BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests/cpp_tests/)
+endif()
