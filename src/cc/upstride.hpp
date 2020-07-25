@@ -16,9 +16,9 @@ typedef struct {
 
 class Context {
     const int typeDimensions;
-    protected:
-    Context(const int td):typeDimensions(td) {};
 
+   protected:
+    Context(const int td) : typeDimensions(td){};
 };
 
 template <typename Device, typename T>
@@ -36,8 +36,14 @@ struct UpstrideConv2DFunctor {
                     DataFormat format);
 };
 
-template<>
-struct UpstrideConv2DFunctor<device::CPU,float> {
+template <>
+struct UpstrideConv2DFunctor<device::CPU, float> {
+    class Backend;
+    Backend* backend;
+
+    UpstrideConv2DFunctor() : backend(nullptr) {}
+    ~UpstrideConv2DFunctor();
+
     void operator()(const Tensor<const float>& input,
                     const Tensor<const float>& kernel,
                     Tensor<float>& output,

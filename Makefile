@@ -8,7 +8,7 @@ default:
 	@make -s build/*.so
 
 build/*.so : build $(shell find $(SOURCE_PATH) -type f)
-	@cd build .. && make VERBOSE=1
+	@cd build .. && make -j4
 
 
 # generates Makefile using CMake
