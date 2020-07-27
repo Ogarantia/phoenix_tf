@@ -1,3 +1,6 @@
 [submodule "thirdparty/onednn"]
 	path = thirdparty/onednn
 	url = https://github.com/oneapi-src/oneDNN.git
+[submodule "core"]
+	path = core
+	url = git@bitbucket.org:upstride/phoenix_core.git
