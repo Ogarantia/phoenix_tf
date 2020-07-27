@@ -5,7 +5,7 @@ import numpy, time
 input = tf.random.uniform((1, 3, 224, 224), dtype=tf.float32)
 filter = tf.random.uniform((32, 3, 3, 3), dtype=tf.float32)
 
-numRep = 100
+numRep = 10000
 timesTest = [0] * numRep
 timesRef = [0] * numRep
 for i in range(numRep):

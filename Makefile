@@ -1,6 +1,6 @@
 SOURCE_PATH=src
 
-.PHONY : default clean
+.PHONY : default
 
 
 # default target building shared objects
@@ -8,7 +8,7 @@ default:
 	@make -s build/*.so
 
 build/*.so : build $(shell find $(SOURCE_PATH) -type f)
-	@cd build .. && make -j4
+	@cd build .. && make VERBOSE=1 -j8
 
 
 # generates Makefile using CMake
@@ -22,7 +22,7 @@ distclean:
 	@rm -rf build
 # Clean the build folder
 clean:
-	@cd build && make clean
+	@rm src/python/upstride/type2/tf/keras/_upstride.so ; rm build/tests
 
 # build docker with compilation environment
 build_dev_docker:

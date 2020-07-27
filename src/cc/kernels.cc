@@ -47,8 +47,8 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
             InputTensorTF<T> filter(context, INPUT_FILTER_IDX);
             
-            std::cout << "inputShape = " << input.getShape() << std::endl;
-            std::cout << "filterShape = " << filter.getShape() << std::endl;
+            // std::cout << "inputShape = " << input.getShape() << std::endl;
+            // std::cout << "filterShape = " << filter.getShape() << std::endl;
 
             // compute output shape
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(

@@ -77,7 +77,7 @@ message("-- TENSORFLOW_COMPILE_FLAGS: ${TENSORFLOW_COMPILE_FLAGS}")
 message("-- TENSORFLOW_LINK_FLAGS: ${TENSORFLOW_LINK_FLAGS}")
 
 # setup compilation flags; C++11 required for tensorflow
-set(COMMON_FLAGS "-fPIC -O2 -Wfatal-errors")
+set(COMMON_FLAGS "-g -fPIC -O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -floop-nest-optimize -fipa-pta -flto -ftree-vectorize  -Wfatal-errors")
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
