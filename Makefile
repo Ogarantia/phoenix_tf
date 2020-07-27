@@ -14,7 +14,7 @@ build/*.so : build $(shell find $(SOURCE_PATH) -type f)
 # generates Makefile using CMake
 build: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake ..
+	@cd build && cmake .. -DDNNL_ARCH_OPT_FLAGS="-O3 -ffast-math -funroll-loops -floop-nest-optimize -ftree-vectorize"
 
 
 # removes the build folder

@@ -41,7 +41,7 @@ class upstride::UpstrideConv2DFunctor<upstride::device::CPU, float>::Backend {
                                                  onednn::convertDataFormatToFormatTag(tensorFormat)),
 
                                    convDesc(dnnl::prop_kind::forward_inference,
-                                            dnnl::algorithm::convolution_direct,
+                                            dnnl::algorithm::convolution_auto,
                                             inputMemDesc, filterMemDesc, outputMemDesc,
                                             dnnl::memory::dims{1, 1},
                                             dnnl::memory::dims{0, 0}, dnnl::memory::dims{0, 0}),
