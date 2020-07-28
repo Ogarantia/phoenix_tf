@@ -8,7 +8,8 @@ filter = tf.random.uniform((32, 3, 3, 3), dtype=tf.float32) / (3*3*3)
 inputs = [tf.random.uniform((1, 3, 224, 224), dtype=tf.float32) for _ in range(num_rep)]
 
 padding = 'SAME'
-strides = [2, 2]
+strides = [2, 5]
+dilations = [3, 2]
 
 timesTest = [0] * num_rep
 timesRef = [0] * num_rep
@@ -18,6 +19,7 @@ upstride_ops.upstride_conv2d(
     inputs[42], filter,
     strides=strides,
     padding=padding,
+    dilations=dilations,
     data_format='NCHW'
 )
 
@@ -27,6 +29,7 @@ for i in range(num_rep):
       inputs[i], filter,
       strides=strides,
       padding=padding,
+      dilations=dilations,
       data_format='NCHW'
   )
   timesTest[i] = time.time() - start
@@ -40,7 +43,8 @@ filter = tf.transpose(filter, [2, 3, 1, 0])
 outputRef = tf.nn.conv2d(
     inputs[42], filter,
     strides=strides,
-    padding=padding
+    padding=padding,
+    dilations=dilations
 )
 
 for i in range(num_rep):
@@ -48,12 +52,13 @@ for i in range(num_rep):
   outputRef = tf.nn.conv2d(
       inputs[i], filter,
       strides=strides,
-      padding=padding
+      padding=padding,
+      dilations=dilations
   )
   timesRef[i] = time.time() - start
 
-
 outputRef = tf.transpose(outputRef, [0, 3, 1, 2])
+
 
 err = tf.math.reduce_max(tf.math.abs(outputTest - outputRef))
 print('Error:', err.numpy())

@@ -23,7 +23,6 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     upstride::IntTuple explicitPadding;
     upstride::IntTuple stride;
     upstride::IntTuple dilation;
-    upstride::IntTuple padBefore, padAfter;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
@@ -42,7 +41,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
         // configure the operation backend
-        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, stride);
+        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, stride, dilation);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -53,7 +52,8 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
             InputTensorTF<T> filter(context, INPUT_FILTER_IDX);
 
-            // compute output shape
+            // compute output shape and paddings
+            upstride::IntPair padBefore, padAfter;
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
                 1, dataFormat,
                 input.getShape(), filter.getShape(),
