@@ -20,9 +20,10 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
 
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
-    std::vector<int32> explicitPadding;
-    std::vector<int32> stride;
-    std::vector<int32> dilation;
+    upstride::IntTuple explicitPadding;
+    upstride::IntTuple stride;
+    upstride::IntTuple dilation;
+    upstride::IntTuple padBefore, padAfter;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
@@ -51,21 +52,18 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             // grab inputs
             InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
             InputTensorTF<T> filter(context, INPUT_FILTER_IDX);
-            
-            // std::cout << "inputShape = " << input.getShape() << std::endl;
-            // std::cout << "filterShape = " << filter.getShape() << std::endl;
 
             // compute output shape
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
                 1, dataFormat,
                 input.getShape(), filter.getShape(),
-                paddingPreset, explicitPadding, stride, dilation));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter));
 
             // allocate output tensor
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            (*this)(input, filter, output);
+            (*this)(input, filter, output, padBefore, padAfter);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
