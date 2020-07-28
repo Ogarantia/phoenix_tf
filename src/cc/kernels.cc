@@ -42,7 +42,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
         // configure the operation backend
-        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat);
+        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, stride);
     }
 
     void Compute(OpKernelContext* context) override {
