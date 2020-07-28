@@ -6,6 +6,8 @@
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
 
+#include "onednn/onednn.hpp"
+
 namespace tensorflow {
 
 // OpKernel definition.
@@ -37,6 +39,9 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         std::string dataFormatStr;
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
+
+        // configure the operation backend
+        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -60,7 +65,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            (*this)(input, filter, output, dataFormat);
+            (*this)(input, filter, output);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
