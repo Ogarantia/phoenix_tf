@@ -1,6 +1,6 @@
 import unittest
 import tensorflow as tf
-from modules.upstride_tf.type2.tf.keras import layers
+from src.python.upstride.type2.tf.keras import layers
 
 
 class TestUpstride(unittest.TestCase):

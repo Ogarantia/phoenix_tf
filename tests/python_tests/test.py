@@ -2,11 +2,11 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import gen_math_ops
-from modules.upstride_tf import generic_layers
-from modules.upstride_tf.generic_layers import _ga_multiply_get_index, upstride_type, unit_multiplier, reorder
-from modules.upstride_tf.type2.tf.keras.utils import quaternion_mult1, quaternion_mult2, multiply_by_a1, multiply_by_a2, quaternion_mult_naive
-from modules.upstride_tf.type2.tf.keras.layers import TF2Upstride as QTF2Upstride
-from modules.upstride_tf.type2.tf.keras.layers import BatchNormalizationQ
+from src.python.upstride import generic_layers
+from src.python.upstride.generic_layers import _ga_multiply_get_index, upstride_type, unit_multiplier, reorder
+from src.python.upstride.type2.tf.keras.utils import quaternion_mult1, quaternion_mult2, multiply_by_a1, multiply_by_a2, quaternion_mult_naive
+from src.python.upstride.type2.tf.keras.layers import TF2Upstride as QTF2Upstride
+from src.python.upstride.type2.tf.keras.layers import BatchNormalizationQ
 
 
 class TestGAMultiplication(unittest.TestCase):
