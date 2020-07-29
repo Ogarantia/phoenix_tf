@@ -3,10 +3,10 @@ import tensorflow as tf
 from src.python.upstride.type2.tf.keras.layers import upstride_ops
 
 class TestConv2D(unittest.TestCase):
-    def run_conv2D_test(self, img_size=224, filter_size=3, inChannels=3, outChannels=64, padding='VALID', strides=[1, 1], dilations=[1, 1]):
+    def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1]):
         """ Runs a single convolution and compares the result with TensorFlow output """
-        filter = tf.random.uniform((outChannels, inChannels, filter_size, filter_size), dtype=tf.float32)
-        input = tf.random.uniform((1, inChannels, img_size, img_size), dtype=tf.float32)
+        filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32)
+        input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32)
 
         # run upstride convolution
         output_test = upstride_ops.upstride_conv2d(
@@ -34,9 +34,9 @@ class TestConv2D(unittest.TestCase):
         print('Absolute difference:', err.numpy())
 
 
-    def test_conv2D(self):
-        self.run_conv2D_test(img_size=224, filter_size=3, inChannels=3, outChannels=64, padding='VALID')
-        self.run_conv2D_test(img_size=224, filter_size=4, inChannels=3, outChannels=64, padding='SAME')
-        self.run_conv2D_test(img_size=224, filter_size=5, inChannels=3, outChannels=16, strides=[2, 2])
-        self.run_conv2D_test(img_size=112, filter_size=6, inChannels=16, outChannels=32, dilations=[2, 2])
-        self.run_conv2D_test(img_size=112, filter_size=3, inChannels=32, outChannels=48, padding='SAME', strides=[1, 2], dilations=[3, 4])
+    def test_conv2d(self):
+        self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
+        self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME')
+        self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2])
+        self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, dilations=[2, 2])
+        self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, padding='SAME', strides=[1, 2], dilations=[3, 4])
