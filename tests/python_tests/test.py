@@ -147,35 +147,3 @@ class TestQuaternionBN(unittest.TestCase):
     bn_layer = BatchNormalizationQ()
     outputs = bn_layer(inputs, training=False)
 
-
-class TestTF(unittest.TestCase):
-  def test_init(self):
-    from tests.python_tests.test_tf import TestUpstride as test_upstride_TF
-    test_upstride_TF.test_network(self)
-
-
-# class TestType1(unittest.TestCase):
-#   def test_init(self):
-#     print("Test case: Type 1")
-#     from tests.test_type1 import TestUpstride as test_upstride_t1
-#     generic_layers.change_upstride_type(1, ["", "12"], (2, 0, 0))
-#     test_upstride_t1.test_network(self)
-
-
-class TestType2(unittest.TestCase):
-  def test_init(self):
-    from tests.python_tests.test_type2 import TestUpstride as test_upstride_t2
-    generic_layers.change_upstride_type(2, ["", "12", "23", "13"], (3, 0, 0))
-    test_upstride_t2.test_network(self)
-
-
-# class TestType3(unittest.TestCase):
-#   def test_init(self):
-#     print("Test case: Type 3")
-#     from tests.test_type3 import TestUpstride as test_upstride_t3
-#     generic_layers.change_upstride_type(3, ["", "1", "2", "3", "12", "13", "23", "123"], (3, 0, 0))
-#     test_upstride_t3.test_network(self)
-
-
-if __name__ == "__main__":
-  unittest.main()
