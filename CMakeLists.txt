@@ -18,7 +18,13 @@ set(SOURCES ${SOURCES}
 )
 
 # add the library
-add_library(_upstride SHARED ${SOURCES})
+if (WITH_CUDNN)
+  find_package(CUDA)
+  cuda_add_library(_upstride SHARED ${SOURCES})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBACKEND_CUDNN")
+else()
+  add_library(_upstride SHARED ${SOURCES})
+endif()
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
