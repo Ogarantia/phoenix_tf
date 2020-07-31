@@ -26,7 +26,7 @@ endif()
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/python/upstride/type2/tf/keras")
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libs/")
 
 ########################
 #   TENSORFLOW SETUP   #
@@ -54,4 +54,3 @@ if (TENSORFLOW_VERSION STREQUAL "1")
   message("-- Using Tensorflow 1.x")
   set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
 endif()
-

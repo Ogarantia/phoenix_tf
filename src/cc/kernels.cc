@@ -81,8 +81,8 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
    public:
     static const int
         INPUT_GRAD_IDX = 0,    //!< index of the input tensor containing the loss function gradient
-        INPUT_KERNEL_IDX = 1,  //!< index of the input tensor containing the filter
-        INPUT_INPUT_IDX = 2;   //!< index of the input tensor containing the image
+        INPUT_INPUT_IDX = 1,   //!< index of the input tensor containing the image
+        INPUT_KERNEL_IDX = 2;  //!< index of the input tensor containing the filter
     static const int
         OUTPUT_KERNELGRAD_IDX = 0,   //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 1;    //!< index of the output tensor containing the filter
