@@ -76,7 +76,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
     upstride::IntTuple explicitPadding;
     upstride::IntTuple stride;
     upstride::IntTuple dilation;
-    bool requireGrad;
+    bool requireInputGrad;
 
    public:
     static const int
@@ -102,10 +102,10 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
-        OP_REQUIRES_OK(context, context->GetAttr("require_grad", &requireGrad));
+        OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
 
         // configure the operation backend
-        upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireGrad);
+        upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireInputGrad);
     }
 
     void Compute(OpKernelContext* context) override {

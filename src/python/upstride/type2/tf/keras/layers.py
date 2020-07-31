@@ -13,7 +13,7 @@ from ....generic_layers import *
 from .convolutional import DepthwiseConv2D
 from .dense import Dense
 
-upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('_upstride.so'))
+upstride_ops = load_library.load_op_library('_upstride.so')
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]

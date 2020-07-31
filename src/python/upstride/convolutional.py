@@ -46,6 +46,16 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import nn_ops
 
+import tensorflow as tf
+from tensorflow.python.framework import ops as tf_ops
+from tensorflow.python.framework import load_library
+
+ops = load_library.load_op_library('_upstride.so')
+
+@tf_ops.RegisterGradient("UpstrideConv2D")
+def _conv2d_grad(op, grad):
+    return ops.upstride_conv2d_grad(grad, op.inputs[0], op.inputs[1], op.get_attr("strides"), op.get_attr("padding"))
+
 
 class Conv(Layer):
   """Abstract N-D convolution layer (private, used as implementation base).
