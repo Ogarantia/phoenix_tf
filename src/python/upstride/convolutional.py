@@ -54,7 +54,7 @@ ops = load_library.load_op_library('_upstride.so')
 
 @tf_ops.RegisterGradient("UpstrideConv2D")
 def _conv2d_grad(op, grad):
-    return ops.upstride_conv2d_grad(grad, op.inputs[0], op.inputs[1], op.get_attr("strides"), op.get_attr("padding"))
+    return ops.upstride_conv2d_grad(grad, op.inputs[0], op.inputs[1], op.get_attr("strides"), op.get_attr("padding"), data_format=op.get_attr("data_format"))
 
 
 class Conv(Layer):
