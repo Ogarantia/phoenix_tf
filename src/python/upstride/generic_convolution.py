@@ -1,6 +1,31 @@
 import tensorflow as tf
 layers = tf.keras.layers
-
+from tensorflow.python.framework import tensor_shape
+from tensorflow.python.eager import context
+from tensorflow.python.framework import tensor_shape
+from tensorflow.python.keras import activations
+from tensorflow.python.keras import backend
+from tensorflow.python.keras import constraints
+from tensorflow.python.keras import initializers
+from tensorflow.python.keras import regularizers
+from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.keras.engine.input_spec import InputSpec
+# imports for backwards namespace compatibility
+# pylint: disable=unused-import
+from tensorflow.python.keras.layers.pooling import AveragePooling1D
+from tensorflow.python.keras.layers.pooling import AveragePooling2D
+from tensorflow.python.keras.layers.pooling import AveragePooling3D
+from tensorflow.python.keras.layers.pooling import MaxPooling1D
+from tensorflow.python.keras.layers.pooling import MaxPooling2D
+from tensorflow.python.keras.layers.pooling import MaxPooling3D
+# pylint: enable=unused-import
+from tensorflow.python.keras.utils import conv_utils
+from tensorflow.python.keras.utils import tf_utils
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import nn
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.util.tf_export import keras_export
+# pylint: disable=g-classes-have-attributes
 
 class GenericConv2D(layers.Conv2D):
   def __init__(self, filters,
@@ -20,13 +45,14 @@ class GenericConv2D(layers.Conv2D):
                kernel_constraint=None,
                bias_constraint=None,
                **kwargs):
+    if groups != 1:
+      raise ValueError('groups must be 1')           
     super().__init__(filters,
                      kernel_size,
                      strides,
                      padding,
                      data_format,
                      dilation_rate,
-                     groups,
                      activation,
                      use_bias,
                      kernel_initializer,
@@ -45,8 +71,10 @@ class GenericConv2D(layers.Conv2D):
     input_shape = tensor_shape.TensorShape(input_shape)
     if self.data_format == 'channels_first':
       channel_axis = 1
+      self.data_format = "NCHW"
     else:
       channel_axis = -1
+      self.data_format = "NHWC"
     if input_shape.dims[channel_axis].value is None:
       raise ValueError('The channel dimension of the inputs '
                        'should be defined. Found `None`.')
@@ -81,7 +109,8 @@ class GenericConv2D(layers.Conv2D):
     self.built = True
 
   def call(self, inputs):
-    output = self.upstride_conv_op(inputs, self.kernel, self.strides, self.padding, self.data_format, self.dilation_rate, self.name)
+    print(inputs, self.kernel, self.strides, self.padding, self.data_format, self.dilation_rate, self.name)
+    output = self.upstride_conv_op(inputs, self.kernel, strides=self.strides, dilations=self.dilation_rate, padding=self.padding.upper(), data_format=self.data_format, name=self.name)
 
     # TODO gros todo, for now it doesn't work
     if self.use_bias:

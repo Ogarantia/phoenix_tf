@@ -10,16 +10,15 @@ default:
 build/*.so : build $(shell find $(SOURCE_PATH) -type f)
 	@cd build .. && make VERBOSE=1 -j8
 
-
 # generates Makefile using CMake
 build: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake ..
-
+	@cd build && cmake -DWITH_CUDNN=$(WITH_CUDNN) ..
 
 # removes the build folder
 distclean:
 	@rm -rf build
+
 # Clean the build folder
 clean:
 	@rm src/python/upstride/type2/tf/keras/_upstride.so ; rm build/tests
