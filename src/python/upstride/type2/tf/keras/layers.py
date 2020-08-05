@@ -5,7 +5,6 @@ from tensorflow.keras.layers import Layer
 from tensorflow.python.framework import load_library
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.platform import resource_loader
 
 from .... import generic_layers
 from ....generic_convolution import GenericConv2D
