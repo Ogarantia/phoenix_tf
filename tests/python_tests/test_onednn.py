@@ -72,10 +72,6 @@ class TestConv2DGrad(unittest.TestCase):
                   strides=strides,
                   padding=padding,
                   dilations=dilations) 
-      
-      grad_reference = gt.gradient(output_ref_TF, filter_t)
-      #                                              O  I  H  W 
-      grad_reference = tf.transpose(grad_reference, [3, 2, 0, 1])
 
       grad_reference_TF = gt.gradient(output_ref_TF, filter_t)
       #                                              O  I  H  W 
@@ -83,13 +79,13 @@ class TestConv2DGrad(unittest.TestCase):
 
       ## COMPARISONS
       err = tf.math.reduce_max(tf.math.abs(grad_test - grad_reference_TF))
-      self.assertLess(err, 1e-2, f"Absolute difference with the reference is too big: {err}")
+      self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
       print('[Conv2DBwd] Absolute difference:', err.numpy())
 
     def test_conv2dgrad(self):
-      self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
-      self.run_conv2dgrad_test(img_size=128, filter_size=4, in_channels=3, out_channels=64, padding='SAME')
-      self.run_conv2dgrad_test(img_size=128, filter_size=7, in_channels=3, out_channels=16, strides=[2, 2])
-      self.run_conv2dgrad_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
-      self.run_conv2dgrad_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME')
-      self.run_conv2dgrad_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2])
+      self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID')
+      self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME')
+      self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, strides=[2, 2])
+      self.run_conv2dgrad_test(img_size=32, filter_size=3, in_channels=3, out_channels=8, padding='VALID')
+      self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, padding='SAME')
+      self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2])
