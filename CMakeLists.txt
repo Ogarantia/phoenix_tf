@@ -22,7 +22,7 @@ add_library(_upstride SHARED ${SOURCES})
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""
-  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/python/upstride/type2/tf/keras")
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libs/")
 
 ########################
 #   TENSORFLOW SETUP   #
@@ -58,4 +58,3 @@ endif()
 if (TENSORFLOW_VERSION STREQUAL "1")
   set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
 endif()
-

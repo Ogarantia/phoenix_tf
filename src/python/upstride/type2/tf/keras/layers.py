@@ -5,7 +5,6 @@ from tensorflow.keras.layers import Layer
 from tensorflow.python.framework import load_library
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.platform import resource_loader
 
 from .... import generic_layers
 from ....generic_convolution import GenericConv2D
@@ -13,7 +12,7 @@ from ....generic_layers import *
 from .convolutional import DepthwiseConv2D
 from .dense import Dense
 
-upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('_upstride.so'))
+upstride_ops = load_library.load_op_library('_upstride.so')
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
