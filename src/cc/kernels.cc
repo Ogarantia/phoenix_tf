@@ -56,13 +56,13 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
                 1, dataFormat,
                 input.getShape(), filter.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, (filter.getShape().getSize()>4)));
 
             // allocate output tensor
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            (*this)(input, filter, output, padBefore, padAfter);
+            (*this)(input, filter, output, padBefore, padAfter, (filter.getShape().getSize()>4));
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }

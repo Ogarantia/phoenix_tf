@@ -79,7 +79,7 @@ class TestConv2DGrad(unittest.TestCase):
 
       ## COMPARISONS
       err = tf.math.reduce_max(tf.math.abs(grad_test - grad_reference_TF))
-      self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
+      self.assertLess(err, 1e-2, f"Absolute difference with the reference is too big: {err}")
       print('[Conv2DBwd] Absolute difference:', err.numpy())
 
     def test_conv2dgrad(self):
