@@ -32,7 +32,7 @@ def main():
 
   # 3 runsto benchmark
   with open('output.csv', 'w') as f:
-    f.write(f"iter,input_channel,output_channel,image_size,batch_size,engine,value\n")
+    f.write(f"iter,input_channel,output_channel,image_size,batch_size,engine,execution time\n")
   for i in range(3):
     for input_channel in input_channels:
       for output_channel in output_channels:
@@ -49,11 +49,6 @@ def benchmark_upstride(filter, inputs):
   times = [0] * num_rep
   # first run to init upstride
   print('upstride 1')
-  print(inputs[12], filter,
-    strides,
-    padding,
-    dilations,
-    'NCHW')
   upstride_ops.upstride_conv2d(
     inputs[12], filter,
     strides=strides,

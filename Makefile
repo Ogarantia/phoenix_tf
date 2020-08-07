@@ -1,4 +1,5 @@
 SOURCE_PATH=src
+CORE_SOURCE_PATH=core/src
 
 .PHONY : default
 
@@ -7,7 +8,7 @@ SOURCE_PATH=src
 default:
 	@make -s build/*.so
 
-build/*.so : build $(shell find $(SOURCE_PATH) -type f)
+build/*.so : build $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
 	@cd build .. && make VERBOSE=1 -j8
 
 # generates Makefile using CMake
