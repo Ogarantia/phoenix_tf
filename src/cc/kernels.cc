@@ -1,11 +1,10 @@
-#if GOOGLE_CUDA
-#define EIGEN_USE_GPU
-#endif  // GOOGLE_CUDA
-
 #include "onednn/onednn.hpp"
 #include "tensorflow_includes.hpp"
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
+#ifdef BACKEND_CUDNN
+#include "cudnn/cudnn.hpp"
+#endif
 
 namespace tensorflow {
 
@@ -84,7 +83,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         INPUT_INPUT_IDX = 1,   //!< index of the input tensor containing the image
         INPUT_KERNEL_IDX = 2;  //!< index of the input tensor containing the filter
     static const int
-        OUTPUT_KERNELGRAD_IDX = 1,   //!< index of the output tensor containing the loss function gradient
+        OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
     explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context) {
@@ -141,12 +140,13 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
     REGISTER_KERNEL_BUILDER(                                               \
         Name(#OP_NAME).Device(DEVICE_##CPU_OR_GPU).TypeConstraint<T>("T"), \
         OP_NAME##OpKernel<upstride::device::CPU_OR_GPU, T>);
+
+// Register the CPU kernels.
 REGISTER_UPSTRIDE_OP(float, CPU, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, CPU, UpstrideConv2DGrad);
 
 // Register the GPU kernels.
-#ifdef GOOGLE_CUDA
+#ifdef BACKEND_CUDNN
 REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2D);
-REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2DGrad);
-#endif  // GOOGLE_CUDA
+#endif
 }  // namespace tensorflow
