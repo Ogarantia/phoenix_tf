@@ -1,8 +1,8 @@
 import unittest
 import tensorflow as tf
-from src.python.upstride.type2.tf.keras.layers import upstride_ops
+from src.python.upstride.type2.tf.keras.layers import upstride_ops, DepthwiseConv2D
 
-class TestConv2D(unittest.TestCase):
+class TestDeptwiseConv2D(unittest.TestCase):
     def run_conv2d_test(self, img_size=9, filter_size=3, in_channels=64, padding='VALID', strides=[1,1, 1, 1], dilations=[1, 1]):
         """ Runs a single convolution and compares the result with TensorFlow output """
         #                          N      C            H          W
@@ -27,7 +27,8 @@ class TestConv2D(unittest.TestCase):
 
         #re-transpose for OneDNN to  N  C  H  W 
         input = tf.transpose(input, [0, 3, 1, 2])
-        output_test = upstride_ops.upstride_conv2d(
+        output_test = DepthwiseConv2D(
+        #upstride_ops.upstride_conv2d(
           input, filter_5D,
           strides=strides,
           padding=padding,

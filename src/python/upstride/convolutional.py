@@ -2068,9 +2068,24 @@ class DepthwiseConv2D(Conv2D):
           self.bias,
           data_format=self.data_format)
 
-    if self.activation is not None:
-      return self.activation(outputs)
-
+    # if self.activation is not None:
+    #   return self.activation(outputs)
+    
+    # TODO: add dimension to the kernel, provides groups which is equals to input channel 
+    # We can also manage dataformat here and tranpose right before to call our function.
+    print("[DepthwiseConv2D] We are here ")
+    # It's the call from test_depthwiseconv2d.py
+    # upstride_ops.upstride_conv2d(
+    #       input, filter_5D,
+    #       strides=strides,
+    #       padding=padding,
+    #       dilations=dilations,
+    #       data_format='NCHW',
+    #       groups=in_channels
+    #     )
+    output = self.upstride_conv_op(inputs, self.depthwise_kernel, strides=self.strides, 
+                                    dilations=self.dilation_rate, padding=self.padding.upper(), 
+                                    data_format=self.data_format, name=self.name)
     return outputs
 
   @tf_utils.shape_type_conversion
