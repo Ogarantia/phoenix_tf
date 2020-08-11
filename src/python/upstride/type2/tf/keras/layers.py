@@ -242,9 +242,6 @@ class DepthwiseConv2D(Conv2D):
           self.bias,
           data_format=self.data_format)
 
-    output = self.upstride_conv_op(inputs, self.depthwise_kernel, strides=self.strides, 
-                                    dilations=self.dilation_rate, padding=self.padding.upper(), 
-                                    data_format=self.data_format, name=self.name)
     return outputs
 
 class MaxNormPooling2D(Layer):
