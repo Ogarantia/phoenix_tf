@@ -13,7 +13,6 @@ class TestDeptwiseConv2D(unittest.TestCase):
         # run TF convolution on a properly transposed input
         #                            N  H  W  C
         input = tf.transpose(input, [0, 2, 3, 1])
-        # filter = tf.transpose(filter, [2, 3, 1, 0])
         output_ref = tf.nn.depthwise_conv2d(
           input, filter,
           strides=strides,
