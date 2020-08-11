@@ -22,6 +22,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     upstride::IntTuple explicitPadding;
     upstride::IntTuple stride;
     upstride::IntTuple dilation;
+    int groups;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
@@ -38,6 +39,8 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         std::string dataFormatStr;
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
+
+        OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
 
         // configure the operation backend
         upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, stride, dilation);
@@ -56,13 +59,13 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
                 1, dataFormat,
                 input.getShape(), filter.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, (filter.getShape().getSize()>4)));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
             OutputTensorTF<T> output(context, outShape);
 
             // execute the operation
-            (*this)(input, filter, output, padBefore, padAfter, (filter.getShape().getSize()>4));
+            (*this)(input, filter, output, padBefore, padAfter, groups);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
