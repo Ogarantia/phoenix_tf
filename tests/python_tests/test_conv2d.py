@@ -5,8 +5,8 @@ from src.python.upstride.type2.tf.keras.layers import upstride_ops
 class TestConv2D(unittest.TestCase):
     def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1]):
         """ Runs a single convolution and compares the result with TensorFlow output """
-        filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32)
-        input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32)
+        filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
+        input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
 
         # run upstride convolution
         output_test = upstride_ops.upstride_conv2d(
@@ -44,8 +44,8 @@ class TestConv2D(unittest.TestCase):
 class TestConv2DGrad(unittest.TestCase):
     def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1,1], dilations=[1,1]):
       """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
-      input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32)
-      filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32)
+      input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
+      filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
 
       ## UPSTRIDE
       with tf.GradientTape() as gt:
@@ -89,3 +89,4 @@ class TestConv2DGrad(unittest.TestCase):
       self.run_conv2dgrad_test(img_size=32, filter_size=3, in_channels=3, out_channels=8, padding='VALID')
       self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, padding='SAME')
       self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2])
+      self.run_conv2dgrad_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID')

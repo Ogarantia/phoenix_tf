@@ -27,7 +27,6 @@ REGISTER_OP("UpstrideConv2DGrad")
     .Input("kernel: T")
     .Output("input_grad: T")
     .Output("kernel_grad: T")
-    .Attr("require_input_grad: bool = true")
     .Attr("strides: list(int)")
     .Attr("dilations: list(int) = [1, 1, 1, 1]")
 #ifdef TENSORFLOW_VERSION_1
@@ -37,6 +36,7 @@ REGISTER_OP("UpstrideConv2DGrad")
     .Attr(::tensorflow::GetExplicitPaddingsAttrString())
 #endif
     .Attr(::tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("require_input_grad: bool = false")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
         c->set_output(0, c->input(1));
         c->set_output(1, c->input(2));

@@ -22,7 +22,9 @@ distclean:
 
 # Clean the build folder
 clean:
-	@rm src/python/upstride/type2/tf/keras/_upstride.so ; rm build/tests
+	@rm build/libs/_upstride.so
+	@rm -rf build/CMakeFiles/_upstride.dir
+	@rm build/tests
 
 # build docker with compilation environment
 build_dev_docker:

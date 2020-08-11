@@ -108,7 +108,11 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
 
         // configure the operation backend
-        upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireInputGrad);
+        try {
+            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireInputGrad);
+        } catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
+        }
     }
 
     void Compute(OpKernelContext* context) override {
@@ -152,5 +156,6 @@ REGISTER_UPSTRIDE_OP(float, CPU, UpstrideConv2DGrad);
 // Register the GPU kernels.
 #ifdef BACKEND_CUDNN
 REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2D);
+REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2DGrad);
 #endif
 }  // namespace tensorflow
