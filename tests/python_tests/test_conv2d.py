@@ -26,7 +26,6 @@ class TestConv2D(unittest.TestCase):
           padding=padding,
           dilations=dilations
         )
-
         # compare the outputs
         output_ref = tf.transpose(output_ref, [0, 3, 1, 2])
         err = tf.math.reduce_max(tf.math.abs(output_test - output_ref))

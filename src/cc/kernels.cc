@@ -79,6 +79,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
     upstride::IntTuple explicitPadding;
     upstride::IntTuple stride;
     upstride::IntTuple dilation;
+    int groups;
     bool requireInputGrad;
 
    public:
@@ -107,6 +108,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
 
+        OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
         // configure the operation backend
         try {
             upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireInputGrad);
@@ -129,14 +131,14 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
                 1, dataFormat,
                 input.getShape(), kernel.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
             OutputTensorTF<T> kernelGrad(context, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
             OutputTensorTF<T> inputGrad(context, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
-            (*this)(input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter);
+            (*this)(input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }

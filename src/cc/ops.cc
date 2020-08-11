@@ -36,6 +36,7 @@ REGISTER_OP("UpstrideConv2DGrad")
     .Attr(::tensorflow::GetExplicitPaddingsAttrString())
 #endif
     .Attr(::tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("groups: int = 1")
     .Attr("require_input_grad: bool = false")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
         c->set_output(0, c->input(1));
