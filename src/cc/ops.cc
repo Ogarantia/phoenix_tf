@@ -15,6 +15,7 @@ REGISTER_OP("UpstrideConv2D")
     .Attr(::tensorflow::GetExplicitPaddingsAttrString())
 #endif
     .Attr(::tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("groups: int = 1")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
         return ::tensorflow::errors::Unimplemented("");
     });
