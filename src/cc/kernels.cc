@@ -1,11 +1,7 @@
-#include "onednn/onednn.hpp"
 #include "tensorflow_includes.hpp"
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
-
-#ifdef BACKEND_CUDNN
-#include "cudnn/cudnn.hpp"
-#endif
+#include "conv2d.hpp"
 
 namespace tensorflow {
 
