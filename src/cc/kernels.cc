@@ -1,7 +1,7 @@
+#include "conv2d.hpp"
 #include "tensorflow_includes.hpp"
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
-#include "conv2d.hpp"
 
 namespace tensorflow {
 
@@ -52,8 +52,8 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
 
         try {
             // grab inputs
-            InputTensorTF<T> input(context, INPUT_IMAGE_IDX);
-            InputTensorTF<T> filter(context, INPUT_FILTER_IDX);
+            InputTensorTF<Device, T> input(context, INPUT_IMAGE_IDX);
+            InputTensorTF<Device, T> filter(context, INPUT_FILTER_IDX);
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
@@ -63,7 +63,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
-            OutputTensorTF<T> output(context, outShape);
+            OutputTensorTF<Device, T> output(context, outShape);
 
             // execute the operation
             (*this)(input, filter, output, padBefore, padAfter, groups);
@@ -126,9 +126,9 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 
         try {
             // grab inputs
-            InputTensorTF<T> grad(context, INPUT_GRAD_IDX);
-            InputTensorTF<T> kernel(context, INPUT_KERNEL_IDX);
-            InputTensorTF<T> input(context, INPUT_INPUT_IDX);
+            InputTensorTF<Device, T> grad(context, INPUT_GRAD_IDX);
+            InputTensorTF<Device, T> kernel(context, INPUT_KERNEL_IDX);
+            InputTensorTF<Device, T> input(context, INPUT_INPUT_IDX);
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
@@ -138,8 +138,8 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
-            OutputTensorTF<T> kernelGrad(context, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
-            OutputTensorTF<T> inputGrad(context, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
+            OutputTensorTF<Device, T> kernelGrad(context, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
+            OutputTensorTF<Device, T> inputGrad(context, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
             (*this)(input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
@@ -150,18 +150,18 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 };
 
 // Register the CPU kernels.
-#define REGISTER_UPSTRIDE_OP(T, CPU_OR_GPU, OP_NAME)                       \
+#define REGISTER_UPSTRIDE_OP(T, CPU_OR_GPU, DEVICE, OP_NAME)               \
     REGISTER_KERNEL_BUILDER(                                               \
         Name(#OP_NAME).Device(DEVICE_##CPU_OR_GPU).TypeConstraint<T>("T"), \
-        OP_NAME##OpKernel<upstride::device::CPU_OR_GPU, T>);
+        OP_NAME##OpKernel<upstride::device::DEVICE, T>);
 
 // Register the CPU kernels.
-REGISTER_UPSTRIDE_OP(float, CPU, UpstrideConv2D);
-REGISTER_UPSTRIDE_OP(float, CPU, UpstrideConv2DGrad);
+REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2D);
+REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2DGrad);
 
 // Register the GPU kernels.
 #ifdef BACKEND_CUDNN
-REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2D);
-REGISTER_UPSTRIDE_OP(float, GPU, UpstrideConv2DGrad);
+REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2D);
+REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2DGrad);
 #endif
 }  // namespace tensorflow

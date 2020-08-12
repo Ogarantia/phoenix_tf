@@ -29,8 +29,8 @@ tensorflow::TensorShape toTensorflowShape(const Shape& inShape) {
     return outShape;
 }
 
-template <typename T>
-class InputTensorTF : public Tensor<const T> {
+template <typename Device, typename T>
+class InputTensorTF : public Tensor<Device, const T> {
    public:
     /**
      * @brief Construct a new Tensor object from a Tensorflow input Tensor
@@ -38,8 +38,8 @@ class InputTensorTF : public Tensor<const T> {
      * @param context Tensorflow context
      * @param idx Index of the tensor to get in the context
      */
-    InputTensorTF(tensorflow::OpKernelContext* context, const int idx) : Tensor<const T>(toUpstrideShape(context->input(idx).shape()),
-                                                                                         context->input(idx).flat<T>().data()) {}
+    InputTensorTF(tensorflow::OpKernelContext* context, const int idx) : Tensor<Device, const T>(toUpstrideShape(context->input(idx).shape()),
+                                                                                                 context->input(idx).flat<T>().data()) {}
 };
 
 /**
@@ -47,8 +47,8 @@ class InputTensorTF : public Tensor<const T> {
  * 
  * @tparam T Tensorflow Tensor type
  */
-template <typename T>
-class OutputTensorTF : public Tensor<T> {
+template <typename Device, typename T>
+class OutputTensorTF : public Tensor<Device, T> {
     static T* getOutputPtr(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int index) {
         tensorflow::Tensor* tensor = nullptr;
         ::tensorflow::Status status(context->allocate_output(index, shape, &tensor));
@@ -65,8 +65,9 @@ class OutputTensorTF : public Tensor<T> {
      * @param shape     Output tensor shape
      * @param idx       Operation output index
      */
-    OutputTensorTF(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<T>(toUpstrideShape(shape),
-                                                                                                                              getOutputPtr(context, shape, idx)) {}
+    OutputTensorTF(tensorflow::OpKernelContext* context,
+                   const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<Device, T>(toUpstrideShape(shape),
+                                                                                                getOutputPtr(context, shape, idx)) {}
 };
 
 }  // namespace frontend_tf
