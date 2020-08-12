@@ -39,7 +39,12 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
 
         // configure the operation backend
-        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, stride, dilation);
+        //FIXME: Check status and throw an exception
+        upstride::IntPair st, dil;
+        upstride::getSpatialStep(stride, 1, st);
+        upstride::getSpatialStep(dilation, 1, dil);
+
+        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, st, dil);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -107,7 +112,10 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
         // configure the operation backend
         try {
-            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, stride, dilation, requireInputGrad);
+            upstride::IntPair st, dil;
+            upstride::getSpatialStep(stride, 1, st);
+            upstride::getSpatialStep(dilation, 1, dil);
+            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, st, dil, requireInputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
