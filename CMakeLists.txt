@@ -52,7 +52,13 @@ message("     Compile flags: ${TENSORFLOW_COMPILE_FLAGS}")
 message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 
 # setup compilation flags; C++11 required for tensorflow
-set(COMMON_FLAGS "-g -fPIC -O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -floop-nest-optimize -fipa-pta -flto -ftree-vectorize  -Wfatal-errors")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  set(OPTIMIZATION_FLAGS "-O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
+else ()
+  set(OPTIMIZATION_FLAGS "-O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -floop-nest-optimize -fipa-pta -flto -ftree-vectorize")
+endif()
+
+set(COMMON_FLAGS "-g -fPIC ${OPTIMIZATION_FLAGS} -Wfatal-errors")
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 # macOS-specific directive
