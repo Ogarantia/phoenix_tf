@@ -9,7 +9,7 @@ default:
 	@make -s build/*.so
 
 build/*.so : build $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
-	@cd build .. && make VERBOSE=1 -j8
+	@cd build && make VERBOSE=1 -j8
 
 # generates Makefile using CMake
 build: CMakeLists.txt
