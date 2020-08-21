@@ -1,12 +1,14 @@
+import sys
+
+sys.path.append("src/python")
+
 import unittest
-import tensorflow as tf
 import numpy as np
-from src.python.upstride import generic_layers
-from tests.python_tests.test_tf import TestTF
-# from tests.python_tests.test_type2 import TestUpstride
-from tests.python_tests.test_conv2d import TestConv2D, TestConv2DGrad
-from tests.python_tests.test_depthwiseconv2d import *
-from src.python.upstride.type2.tf.keras.test_layers import TestType2LayersTF2Upstride
+import tensorflow as tf
+
+from upstride.type2.tf.keras.test_layers import TestType2LayersTF2Upstride, TestType2Upstride2TF, TestType2Conv2D
+from tests.python_unittests.test_conv2d import TestConv2D, TestConv2DGrad
+from tests.python_unittests.test_depthwiseconv2d import TestDepthwiseConv2D, TestDepthwiseConv2DGrad
 
 if __name__ == "__main__":
   unittest.main()

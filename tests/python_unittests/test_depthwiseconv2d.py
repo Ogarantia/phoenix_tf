@@ -1,6 +1,6 @@
 import unittest
 import tensorflow as tf
-from src.python.upstride.type2.tf.keras.layers import upstride_ops, DepthwiseConv2D
+from upstride.type_generic.custom_op import upstride_ops
 
 def get_inputs_and_filters(in_channels, img_size, filter_size):
   input_upstride = tf.random.normal((1, # N

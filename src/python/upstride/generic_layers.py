@@ -5,7 +5,6 @@ import inspect
 from typing import List, Tuple
 import tensorflow as tf
 
-from .convolutional import Conv2D as Conv2DConj
 
 # Definition of the GA, setup when upstride.type{1/2/3}.calling tf.keras.layers
 upstride_type = 3
@@ -363,7 +362,7 @@ class GenericNonLinear:
 
 class Conv2D(GenericLinear):
   def __init__(self, *argv, **kwargs):
-    super().__init__(tf.keras.layers.Conv2D, *argv, conj_layer=Conv2DConj, **kwargs)
+    super().__init__(tf.keras.layers.Conv2D, *argv, **kwargs)
 
 
 class Dense(GenericLinear):

@@ -1,4 +1,3 @@
-#include "conv2d.hpp"
 #include "tensorflow_includes.hpp"
 #include "upstride.hpp"
 #include "upstride_tf.hpp"
@@ -13,6 +12,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1;  //!< index of the input tensor containing the filter
 
+    const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
@@ -21,7 +21,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     int groups;
 
    public:
-    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context) {
+    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context), algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -44,7 +44,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         upstride::getSpatialStep(stride, 1, st);
         upstride::getSpatialStep(dilation, 1, dil);
 
-        upstride::UpstrideConv2DFunctor<Device, T>::configure(dataFormat, st, dil);
+        upstride::UpstrideConv2DFunctor<Device, T>::configure(algebra, dataFormat, st, dil);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -58,7 +58,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
-                1, dataFormat,
+                algebra, dataFormat,
                 input.getShape(), filter.getShape(),
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
@@ -75,6 +75,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
 
 template <typename Device, typename T>
 class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideConv2DGradFunctor<Device, T> {
+    const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
@@ -92,7 +93,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
-    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context) {
+    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context), algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -115,7 +116,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             upstride::IntPair st, dil;
             upstride::getSpatialStep(stride, 1, st);
             upstride::getSpatialStep(dilation, 1, dil);
-            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(dataFormat, st, dil, requireInputGrad);
+            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(algebra, dataFormat, st, dil, requireInputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
@@ -133,7 +134,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
             TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
-                1, dataFormat,
+                algebra, dataFormat,
                 input.getShape(), kernel.getShape(),
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 

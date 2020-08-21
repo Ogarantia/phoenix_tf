@@ -5,14 +5,11 @@ from tensorflow.keras.layers import Layer
 from tensorflow.python.framework import load_library
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.utils import tf_utils
-
+from upstride.generic_convolution import GenericConv2D
+from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
-from ....generic_convolution import GenericConv2D
 from ....generic_layers import *
-from .convolutional import DepthwiseConv2D
 from .dense import Dense
-
-upstride_ops = load_library.load_op_library('_upstride.so')
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
@@ -32,11 +29,11 @@ class TF2Upstride(Layer):
     Learning module taken from this paper (https://arxiv.org/pdf/1712.04604.pdf)
     BN --> ReLU --> Conv --> BN --> ReLU --> Conv
 
-                Args:
+    Args:
         x: input x
         channels: number of channels
     Returns:
-                        leaned  multi - vector (could have multiple channels)
+        leaned  multi - vector (could have multiple channels)
     """
     x = tf.keras.layers.BatchNormalization()(x)
     x = tf.keras.layers.Activation('relu')(x)
@@ -98,15 +95,14 @@ class Upstride2TF(Layer):
   """
 
   def __init__(self, strategy='default'):
-    self.concat = False
-    if strategy == "concat":
-      self.concat = True
+    self.concat = True if strategy == "concat" else False
 
   def __call__(self, x):
+    components = tf.split(x, 4)
     if self.concat:
-      return tf.concat(x, -1)
+      return tf.concat(components, -1)
     else:
-      return x[0]
+      return components[0]
 
 
 class Conv2D(GenericConv2D):
@@ -144,8 +140,7 @@ class Conv2D(GenericConv2D):
                      kernel_constraint,
                      bias_constraint,
                      **kwargs)
-    self.upstride_type_dim = 4
-    self.upstride_conv_op = upstride_ops.upstride_conv2d
+    self.upstride_datatype = TYPE2
 
 
 class DepthwiseConv2D(Conv2D):
@@ -226,15 +221,15 @@ class DepthwiseConv2D(Conv2D):
     self.built = True
 
   def call(self, inputs):
-    outputs = upstride_ops.conv2d(
+    outputs = self.upstride_conv_op(
         inputs,
         self.depthwise_kernel,
+        uptype=self.upstride_datatype,
         strides=self.strides,
         padding=self.padding,
         dilation_rate=self.dilation_rate,
         data_format=self.data_format,
-        groups=inputs.shape[1]
-        )
+        groups=inputs.shape[1])
 
     if self.use_bias:
       outputs = backend.bias_add(

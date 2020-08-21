@@ -1,6 +1,6 @@
 import unittest
 import tensorflow as tf
-from src.python.upstride.type2.tf.keras.layers import upstride_ops
+from upstride.type_generic.custom_op import upstride_ops
 
 class TestConv2D(unittest.TestCase):
     def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1]):

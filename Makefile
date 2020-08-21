@@ -7,9 +7,10 @@ CORE_SOURCE_PATH=core/src
 # default target building shared objects
 default:
 	@make -s build/*.so
+	@make copy_so
 
 build/*.so : build $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
-	@cd build && make VERBOSE=1 -j8
+	@cd build && make VERBOSE=0 -j8
 
 # generates Makefile using CMake
 build: CMakeLists.txt
@@ -22,9 +23,7 @@ distclean:
 
 # Clean the build folder
 clean:
-	@rm build/libs/_upstride.so
-	@rm -rf build/CMakeFiles/_upstride.dir
-	@rm build/tests
+	@rm build/libs/_upstride.so ; rm build/tests
 
 # build docker with compilation environment
 build_dev_docker:
@@ -44,3 +43,6 @@ run_nsight:
     --privileged \
     upstride/nsight:1.0 \
     bash
+
+copy_so:
+	@cp build/libs/_upstride.so src/python/upstride/type_generic
