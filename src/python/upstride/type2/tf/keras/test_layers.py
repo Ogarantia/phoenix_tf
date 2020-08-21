@@ -59,8 +59,8 @@ class TestType2Conv2D(unittest.TestCase):
     upstride_output = upstride_conv(inputs)
 
     def tf_op(i, k):
-      # upstride kernel is (I, O, H, W). TF expect (H, W, I, O)
-      k = tf.transpose(k, [2, 3, 0, 1])
+      # upstride kernel is (O, I, H, W). TF expect (H, W, I, O)
+      k = tf.transpose(k, [2, 3, 1, 0])
       output = tf.nn.conv2d(i, k, 1, "SAME")
       return output
 
