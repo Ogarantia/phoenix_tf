@@ -122,6 +122,7 @@ class Conv2D(GenericConv2D):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
+               require_input_grad=True,
                **kwargs):
     super().__init__(filters,
                      kernel_size,
@@ -139,6 +140,7 @@ class Conv2D(GenericConv2D):
                      activity_regularizer,
                      kernel_constraint,
                      bias_constraint,
+                     require_input_grad
                      **kwargs)
     self.upstride_datatype = TYPE2
 

@@ -23,6 +23,7 @@ REGISTER_OP("UpstrideConv2D")
 #endif
     .Attr(tensorflow::GetConvnetDataFormatAttrString())
     .Attr("groups: int = 1")
+    .Attr("require_input_grad: bool = true")
     .SetShapeFn([](tensorflow::shape_inference::InferenceContext* ctx) {
         static const int
             INPUT_IDX = 0,

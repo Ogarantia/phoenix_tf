@@ -30,6 +30,7 @@ class GenericConv2D(layers.Conv2D):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
+               require_input_grad=True,
                **kwargs):
     super().__init__(filters,
                      kernel_size,
@@ -51,6 +52,7 @@ class GenericConv2D(layers.Conv2D):
     # for specific implementation, call this __init__ function and change this value
     self.upstride_datatype = None
     self.upstride_conv_op = upstride_conv2d
+    self.require_input_grad = require_input_grad
 
   def build(self, input_shape):
     input_shape = tensor_shape.TensorShape(input_shape)
@@ -113,7 +115,7 @@ class GenericConv2D(layers.Conv2D):
       inputs = array_ops.pad(inputs, self._compute_causal_padding(inputs))
 
     output = self.upstride_conv_op(inputs, self.kernel, uptype=self.upstride_datatype, strides=self.strides,
-                                   dilations=self.dilation_rate, padding=self.padding.upper(), data_format=self.data_format, name=self.name)
+                                    dilations=self.dilation_rate, padding=self.padding.upper(), data_format=self.data_format, name=self.name, require_input_grad=self.require_input_grad)
 
     # TODO gros todo, for now it doesn't work
     if self.use_bias:

@@ -14,4 +14,5 @@ def _conv2d_grad(op, grad):
                                            padding=op.get_attr("padding"),
                                            dilations=op.get_attr("dilations"),
                                            data_format=op.get_attr("data_format"),
-                                           groups=op.get_attr("groups"))
+                                           groups=op.get_attr("groups"),
+                                           require_input_grad=op.get_attr("require_input_grad"))
