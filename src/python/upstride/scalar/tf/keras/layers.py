@@ -5,8 +5,10 @@ from tensorflow.keras.layers import Layer
 from tensorflow.python.framework import load_library
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.utils import tf_utils
+
 from upstride.generic_convolution import GenericConv2D
 from upstride.type_generic.tf.keras.layers import TYPE2
+
 from .... import generic_layers
 from ....generic_layers import *
 from .dense import Dense
@@ -142,7 +144,7 @@ class Conv2D(GenericConv2D):
                      bias_constraint,
                      require_input_grad,
                      **kwargs)
-    self.upstride_datatype = TYPE2
+    self.upstride_datatype = 0
 
 
 class DepthwiseConv2D(Conv2D):

@@ -11,19 +11,12 @@ upstride_type = 3
 blade_indexes = ["", "1", "2", "3", "12", "13", "23", "123"]
 geometrical_def = (3, 0, 0)
 
-conjugate = False
 
-
-def change_upstride_type(type, new_blade_indexes,  new_geometrical_def):
+def change_upstride_type(new_upstride_type, new_blade_indexes,  new_geometrical_def):
   global upstride_type, blade_indexes, geometrical_def
-  upstride_type = type
+  upstride_type = new_upstride_type
   blade_indexes = new_blade_indexes
   geometrical_def = new_geometrical_def
-
-
-def set_conjugaison_mult(b):
-  global conjugate
-  conjugate = b
 
 
 def multivector_length() -> int:
@@ -154,26 +147,7 @@ def get_layers(layer: tf.keras.layers.Layer, conj_layer: tf.keras.layers.Layer =
       kwargs['name'] = f'{base_name}_{i}'
       layers.append(layer(**kwargs))
 
-  if conj_layer is not None:
-    kwargs['ga_dimension'] = multivector_length()
-    conj_layer = conj_layer(**kwargs)
-    return layers, add_bias, bias_parameters, conj_layer
-  else:
-    return layers, add_bias, bias_parameters, None
-
-
-def dagger_sign() -> List[int]:
-  """ return a array s such as for a vecor v of the GA, dagger{v} = s*v
-  dagger is defined by dagger{v} * v = 1
-  """
-  s = []
-  for i in blade_indexes:
-    if len(i) in [0, 1]:
-      s.append(1)
-    else:
-      s.append(-1)
-  return s
-
+  return layers, add_bias, bias_parameters, None
 
 def compute_all_cross_product(layers, inputs, convert_to_tf):
   layers_outputs = []

@@ -47,29 +47,8 @@ class TestType2Upstride2TF(unittest.TestCase):
 
 
 class TestType2Conv2D(unittest.TestCase):
-  def test_conv2d_tf(self):
-    # Run a convolution in tensorflow and in upstride with random inputs and compare the results
-    upstride_conv = Conv2D(1, (1, 1), use_bias=False)
-    upstride_conv(tf.random.uniform((4, 1, 1, 1)))  # run a first time to init the kernel
-    kernels = upstride_conv.kernel  # take the quaternion kernel
-
-    inputs = tf.random.uniform((4, 1, 1, 1))
-
-    # upstride conv
-    upstride_output = upstride_conv(inputs)
-
-    def tf_op(i, k):
-      # upstride kernel is (O, I, H, W). TF expect (H, W, I, O)
-      k = tf.transpose(k, [2, 3, 1, 0])
-      output = tf.nn.conv2d(i, k, 1, "SAME")
-      return output
-
-    inputs = tf.reshape(inputs, [4, 1, 1, 1, 1])
-
-    tf_output = quaternion_mult_naive(tf_op, inputs, kernels)
-
-    for i in range(4):
-      self.assertAlmostEqual(upstride_output.numpy().flatten()[i], [i.numpy().flatten()[0] for i in tf_output][i], 6)
+  def conv2d_tf(self, x):
+    pass
 
   def test_conv2d_fixed_value(self):
     """ in this function, we test 5 quaternions multiplications
@@ -101,3 +80,5 @@ class TestType2Conv2D(unittest.TestCase):
       conv_op.kernel = kernels
       outputs = conv_op(inputs)
       self.assertEqual(list(outputs.numpy().flatten()), expected_outputs[i])
+
+  
