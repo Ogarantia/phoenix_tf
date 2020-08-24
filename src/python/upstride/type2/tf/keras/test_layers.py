@@ -69,7 +69,7 @@ class TestType2Conv2D(unittest.TestCase):
     tf_output = quaternion_mult_naive(tf_op, inputs, kernels)
 
     for i in range(4):
-      self.assertAlmostEqual(upstride_output.numpy().flatten()[i], [i.numpy().flatten()[0] for i in tf_output][i])
+      self.assertAlmostEqual(upstride_output.numpy().flatten()[i], [i.numpy().flatten()[0] for i in tf_output][i], 6)
 
   def test_conv2d_fixed_value(self):
     """ in this function, we test 5 quaternions multiplications
