@@ -64,23 +64,21 @@ REGISTER_OP("UpstrideConv2D")
             if (!getSpatialStep(tuple, 1, dilation))
                 return tensorflow::errors::InvalidArgument("Invalid dilations");
 
-            // compute output shape assuming OIHW filter layout
             using namespace upstride::frontend_tf;
             tensorflow::shape_inference::DimensionHandle outWidth, outHeight;
             auto inputShape = ctx->input(INPUT_IDX);
             auto filterShape = ctx->input(FILTER_IDX);
-            const int filterDims = ctx->Rank(filterShape);
 
             auto result = upstride::frontend_tf::computeWindowedOutputSize(ctx,
                 ctx->Dim(inputShape, getWidthDimensionNumber(dataFormat)),
-                ctx->Dim(filterShape, filterDims - 1),
+                ctx->Dim(filterShape, upstride::Conv2DKernelLayout::widthDim(algebra)),
                 dilation.x, stride.x, padding, padBefore.x, padAfter.x, outWidth);
             if (!result.ok())
                 return result;
 
             result = upstride::frontend_tf::computeWindowedOutputSize(ctx,
                 ctx->Dim(inputShape, getHeightDimensionNumber(dataFormat)),
-                ctx->Dim(filterShape, filterDims - 2),
+                ctx->Dim(filterShape, upstride::Conv2DKernelLayout::heightDim(algebra)),
                 dilation.y, stride.y, padding, padBefore.y, padAfter.y, outHeight);
             if (!result.ok())
                 return result;
@@ -88,13 +86,13 @@ REGISTER_OP("UpstrideConv2D")
             switch (dataFormat) {
                 case upstride::DataFormat::NCHW:
                     ctx->set_output(0, ctx->MakeShape({
-                        ctx->Dim(inputShape, 0), ctx->Dim(filterShape, 0), outHeight, outWidth
+                        ctx->Dim(inputShape, 0), ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra)), outHeight, outWidth
                     }));
                     break;
 
                 case upstride::DataFormat::NHWC:
                     ctx->set_output(0, ctx->MakeShape({
-                        ctx->Dim(inputShape, 0), outHeight, outWidth, ctx->Dim(filterShape, 0)
+                        ctx->Dim(inputShape, 0), outHeight, outWidth, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra))
                     }));
                     break;
 
