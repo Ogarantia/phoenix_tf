@@ -40,6 +40,69 @@ class TestConv2D(unittest.TestCase):
         self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, dilations=[2, 2])
         self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, padding='SAME', strides=[1, 2], dilations=[3, 4])
 
+
+    def test_conv2d_grouped(self, img_size=5, filter_size=3, in_channels=4, out_channels=6, padding='VALID', strides=[1, 1], dilations=[1, 1], groups=2):
+        """ Runs a single convolution and compares the result with its expected output """
+        # If GPU is available, then it computes the output_ref. Otherwise, use the hard-coded version previously computed from a seed
+        device_name = tf.test.gpu_device_name()
+        if device_name != '/device:GPU:0':
+          tf.random.set_seed(42)
+          inputs_channels_first = tf.cast(tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+          filters_upstride = tf.cast(tf.random.uniform((out_channels, in_channels // groups, filter_size, filter_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+
+          output_ref = tf.constant(
+              [[[[ 51.,  89.,  -1.],
+                [  5.,  70.,   6.],
+                [-30., -13., -73.]],
+
+                [[ 30., -14.,  54.],
+                [-30.,  16.,  74.],
+                [ -2.,  68.,  -8.]],
+
+                [[ 12.,  14.,  61.],
+                [ 15.,  53.,  17.],
+                [ 33.,  37., -58.]],
+
+                [[ 24.,  85.,  16.],
+                [ 10., -43.,  36.],
+                [-44.,  10.,  15.]],
+
+                [[ 25., -58., -20.],
+                [-53., -15., -61.],
+                [ 19.,   2.,  40.]],
+
+                [[-29.,   2.,  -9.],
+                [ 34.,  -5.,  15.],
+                [  3.,  33.,   3.]]]])
+        else:
+          inputs_channels_first = tf.cast(tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+          filters_upstride = tf.cast(tf.random.uniform((out_channels, in_channels // groups, filter_size, filter_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+          
+          inputs_channels_last = tf.transpose(inputs_channels_first, [0, 2, 3, 1])
+          filters_keras = tf.transpose(filters_upstride, [2, 3, 1, 0])
+
+          input_shape = inputs_channels_last.shape
+          model = tf.keras.layers.Conv2D(out_channels, filter_size, input_shape=input_shape[1:], groups=groups, use_bias=False)
+          _ = model(inputs_channels_last)
+          self.assertTrue(model.get_weights()[0].shape == filters_keras.shape, f"ref-model-weights' shape and upstride-model-weights' shape mismatch")
+          model.set_weights([filters_keras])
+          output_ref = tf.transpose(model(inputs_channels_last), [0, 3, 1, 2])
+
+        # run upstride convolution
+        output_test = upstride_ops.upstride_conv2d(
+          inputs_channels_first, filters_upstride,
+          strides=strides,
+          padding=padding,
+          dilations=dilations,
+          data_format='NCHW',
+          groups=groups
+        ) 
+
+        err = tf.math.reduce_max(tf.math.abs(output_test - output_ref))
+        self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
+        print('[Conv2DFwd] Absolute difference:', err.numpy())
+
+
 class TestConv2DGrad(unittest.TestCase):
     def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1,1], dilations=[1,1]):
       """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
