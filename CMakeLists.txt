@@ -51,22 +51,33 @@ message("     Version: ${TENSORFLOW_VERSION}")
 message("     Compile flags: ${TENSORFLOW_COMPILE_FLAGS}")
 message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 
-# setup compilation flags; C++11 required for tensorflow
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(OPTIMIZATION_FLAGS "-O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
-else ()
-  set(OPTIMIZATION_FLAGS "-O3 -march=native -mfma -mavx2 -ffast-math -funroll-loops -floop-nest-optimize -fipa-pta -flto -ftree-vectorize")
+##########################################
+# Compilation (optimization) flags setup #
+##########################################
+# Setup common optimization flags
+set(OPTIMIZATION_FLAGS "-O3 -march=native -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
+
+# Setup optimization flags according to the compiler
+if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -floop-nest-optimize")
 endif()
 
+# Setup optimization flags according to processor vendor
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -mfma -mavx2")
+endif()
+
+# Enable debug and opitmization flags
 set(COMMON_FLAGS "-g -fPIC ${OPTIMIZATION_FLAGS} -Wfatal-errors")
+# C++11 is required by Tensorflow & PyTorch
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
-# macOS-specific directive
+# MacOS-specific directive
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   set(CMAKE_CXX_FLAGS "-undefined dynamic_lookup ${CMAKE_CXX_FLAGS}")
 endif()
 
-# enable TF 1.x support by a preprocessor directive
+# Enable TF 1.x support by a preprocessor directive
 if (TENSORFLOW_VERSION STREQUAL "1")
   set(CMAKE_CXX_FLAGS "-DTENSORFLOW_VERSION_1 ${CMAKE_CXX_FLAGS}")
 endif()
