@@ -105,7 +105,6 @@ class TestConv2D(unittest.TestCase):
                 [  0.,  -9.,  -3., -10.],
                 [  4.,  -8.,  -4.,  -7.],
                 [  4.,   0.,   5.,  -4.]]]])
-          grad_ref_inputs_channels_first = tf.transpose(grad_ref_inputs_channels_last, [0, 3, 1, 2])
         else:
           inputs_channels_first = tf.cast(tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
           filters_upstride = tf.cast(tf.random.uniform((out_channels, in_channels // groups, filter_size, filter_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
@@ -127,6 +126,7 @@ class TestConv2D(unittest.TestCase):
           grad_ref_filters_keras_transposed = gt.gradient(output_ref, filters_keras)
           grad_ref_inputs_channels_last = gt.gradient(output_ref, inputs_channels_last)
 
+        grad_ref_inputs_channels_first = tf.transpose(grad_ref_inputs_channels_last, [0, 3, 1, 2])
         # run upstride convolution
         with tf.GradientTape(persistent=True) as gt:
           gt.watch(filters_upstride)
