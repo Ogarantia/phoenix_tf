@@ -59,7 +59,8 @@ REGISTER_OP("UpstrideConv2D")
             upstride::IntTuple tuple;
             GET_FIELD(ctx, "strides", tuple);
             if (!getSpatialStep(tuple, 1, stride))
-                return tensorflow::errors::InvalidArgument("Invalid stides");
+                return tensorflow::errors::InvalidArgument("Invalid strides");
+            tuple.clear();
             GET_FIELD(ctx, "dilations", tuple);
             if (!getSpatialStep(tuple, 1, dilation))
                 return tensorflow::errors::InvalidArgument("Invalid dilations");
