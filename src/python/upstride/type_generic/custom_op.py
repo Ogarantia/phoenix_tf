@@ -5,6 +5,7 @@ from tensorflow.python.framework import ops
 upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('_upstride.so'))
 
 upstride_conv2d = upstride_ops.upstride_conv2d
+
 # declare backward operations
 @ops.RegisterGradient("UpstrideConv2D")
 def _conv2d_grad(op, grad):

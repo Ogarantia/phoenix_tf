@@ -1,6 +1,7 @@
 import sys
-sys.path.append('..')
-from src.python.upstride.type2.tf.keras.layers import *
+sys.path.append('../src/python')
+# from upstride.type2.tf.keras.layers import *
+from upstride.type_generic.custom_op import upstride_ops
 import tensorflow as tf
 import numpy
 import time
@@ -30,7 +31,7 @@ def main():
                     image_size,
                     batch_size)
 
-  # 3 runsto benchmark
+  # 3 runs to benchmark
   with open('output.csv', 'w') as f:
     f.write(f"iter,input_channel,output_channel,image_size,batch_size,engine,execution time\n")
   for i in range(3):
