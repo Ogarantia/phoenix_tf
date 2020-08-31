@@ -1,3 +1,7 @@
+#ifdef BACKEND_CUDNN
+#define EIGEN_USE_GPU
+#endif
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wignored-attributes"       // disabling tensorflow warnings
 

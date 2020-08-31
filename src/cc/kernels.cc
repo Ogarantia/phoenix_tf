@@ -4,6 +4,23 @@
 
 namespace tensorflow {
 
+template<typename Device>
+inline const Device& fromTensorflowDevice(OpKernelContext* context);
+
+template<>
+inline const upstride::device::CPU& fromTensorflowDevice(OpKernelContext* context) {
+    // nothing special to do here
+    static upstride::device::CPU device;
+    return device;
+}
+
+template<>
+inline const upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
+    auto stream = context->eigen_device<Eigen::GpuDevice>().stream();
+    // CUDA devices are identified by their streams
+    return upstride::cudnn::Context::getInstance().registerDevice(stream);
+}
+
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
@@ -51,9 +68,11 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         using namespace upstride::frontend_tf;
 
         try {
+            const Device& device(fromTensorflowDevice<Device>(context));
+
             // grab inputs
-            InputTensorTF<Device, T> input(context, INPUT_IMAGE_IDX);
-            InputTensorTF<Device, T> filter(context, INPUT_FILTER_IDX);
+            InputTensorTF<Device, T> input(context, device, INPUT_IMAGE_IDX);
+            InputTensorTF<Device, T> filter(context, device, INPUT_FILTER_IDX);
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
@@ -63,7 +82,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
-            OutputTensorTF<Device, T> output(context, outShape);
+            OutputTensorTF<Device, T> output(context, device, outShape);
 
             // execute the operation
             (*this)(input, filter, output, padBefore, padAfter, groups);
@@ -126,10 +145,12 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         using namespace upstride::frontend_tf;
 
         try {
+            const Device& device(fromTensorflowDevice<Device>(context));
+
             // grab inputs
-            InputTensorTF<Device, T> grad(context, INPUT_GRAD_IDX);
-            InputTensorTF<Device, T> kernel(context, INPUT_KERNEL_IDX);
-            InputTensorTF<Device, T> input(context, INPUT_INPUT_IDX);
+            InputTensorTF<Device, T> grad(context, device, INPUT_GRAD_IDX);
+            InputTensorTF<Device, T> kernel(context, device, INPUT_KERNEL_IDX);
+            InputTensorTF<Device, T> input(context, device, INPUT_INPUT_IDX);
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
@@ -139,8 +160,8 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
                 paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
 
             // allocate output tensor
-            OutputTensorTF<Device, T> kernelGrad(context, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
-            OutputTensorTF<Device, T> inputGrad(context, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
+            OutputTensorTF<Device, T> kernelGrad(context, device, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
+            OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
             (*this)(input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
