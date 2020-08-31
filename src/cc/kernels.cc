@@ -14,12 +14,14 @@ inline const upstride::device::CPU& fromTensorflowDevice(OpKernelContext* contex
     return device;
 }
 
+#ifdef BACKEND_CUDNN
 template<>
 inline const upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
     auto stream = context->eigen_device<Eigen::GpuDevice>().stream();
     // CUDA devices are identified by their streams
     return upstride::cudnn::Context::getInstance().registerDevice(stream);
 }
+#endif
 
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
