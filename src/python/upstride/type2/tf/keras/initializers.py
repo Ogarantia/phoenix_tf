@@ -166,3 +166,17 @@ class QInitializerDense(QInitializer):
     fan_in = shape[0]
     fan_out = shape[1]
     super(QInitializerDense, self).__init__(shape, fan_in, fan_out, criterion, part_index, seed)
+
+
+def is_type2_init(init_type):
+  """
+  Determine whether it is a is_type2 initialization or not
+  Args:
+      init_type: str or tf.keras.initializers.Initializer, initialization type for upstride is_type2, either
+      'up2_init_he'  or 'up2_init_glorot' for real valued initialization should be tensorflow
+  """
+
+  if isinstance(init_type, str) and 'up2_init' in init_type:
+    return True
+
+  return False

@@ -2,6 +2,7 @@ from tensorflow.python.framework import load_library
 from tensorflow.python.platform import resource_loader
 from tensorflow.python.framework import ops
 
+load_library.load_op_library(resource_loader.get_path_to_datafile('libdnnl.so.1'))
 upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('_upstride.so'))
 
 upstride_conv2d = upstride_ops.upstride_conv2d

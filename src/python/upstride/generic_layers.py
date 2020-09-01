@@ -149,6 +149,7 @@ def get_layers(layer: tf.keras.layers.Layer, *argv, **kwargs) -> Tuple[List[tf.k
 
   return layers, add_bias, bias_parameters
 
+
 def compute_all_cross_product(layers, inputs):
   layers_outputs = []
   for i in range(multivector_length()):
@@ -253,12 +254,13 @@ class GenericLinear:
   this operation will perform linear operation for every GA. 
   Please note that this operation is not very efficient (need to split the tensor, do the computation then concat the results)
   """
+
   def __init__(self, layer, *argv, **kwargs):
     self.layers, self.add_bias, self.bias_parameters = get_layers(layer, *argv, **kwargs)
 
   def __call__(self, inputs):
     # split the input tensor into a list containing [real, complex1, ....]
-    inputs = split(inputs, len(blade_indexes))
+    inputs = tf.split(inputs, len(blade_indexes))
 
     # R^{multivector_length()} input
     layers_outputs = compute_all_cross_product(self.layers, inputs)
@@ -267,7 +269,7 @@ class GenericLinear:
     if self.add_bias:
       for i in range(multivector_length()):
         outputs[i] = BiasLayer(self.bias_parameters['bias_initializer'], self.bias_parameters['bias_regularizer'], self.bias_parameters['bias_constraint'])(outputs[i])
-    outputs = tf.concat([outputs, 0])
+    outputs = tf.concat(outputs, 0)
     return outputs
 
 
@@ -277,11 +279,12 @@ class GenericNonLinear:
   for most of them, we simply need to call the tensorflow function. As real part and imaginary parts are stacked
   on first component of the tensor (usually the batch size), it is transparent for tensorflow
   """
+
   def __init__(self, layer, *argv, **kwargs):
     self.layers = layer(*argv, **kwargs)
 
   def __call__(self, inputs):
-    return self.layers(output)
+    return self.layers(inputs)
 
 
 class Conv2D(GenericLinear):
@@ -354,11 +357,6 @@ class Reshape(GenericNonLinear):
     super().__init__(tf.keras.layers.Reshape, *argv, **kwargs)
 
 
-class BatchNormalization(GenericNonLinear):
-  def __init__(self, *argv, **kwargs):
-    super().__init__(tf.keras.layers.BatchNormalization, *argv, **kwargs)
-
-
 class Activation(GenericNonLinear):
   def __init__(self, *argv, **kwargs):
     super().__init__(tf.keras.layers.Activation, *argv, **kwargs)
@@ -407,7 +405,25 @@ class Concatenate(GenericNonLinear):
     self.list_as_input = True
 
 
-class Dropout(GenericNonLinear):
+# with the formulation of saving the blades of the multivector in the Batch dim, we need to handle
+# Dropout and Batch normalization differently than other layers
+
+class SplittedNonLinear:
+  def __init__(self, layer, *argv, **kwargs):
+    self.layers = [layer(*argv, **kwargs) for _ in range(len(blade_indexes))]
+
+  def __call__(self, inputs):
+    inputs = tf.split(inputs, len(blade_indexes))
+    outputs = [self.layers[i](inputs[i]) for i in range(len(blade_indexes))]
+    outputs = tf.concat(outputs, 0)
+    return outputs
+
+
+class Dropout(SplittedNonLinear):
   def __init__(self, *argv, **kwargs):
-    # TODO for now dropout manage real part and img part separately. better if manage both at the same time
     super().__init__(tf.keras.layers.Dropout, *argv, **kwargs)
+
+
+class BatchNormalization(SplittedNonLinear):
+  def __init__(self, *argv, **kwargs):
+    super().__init__(tf.keras.layers.BatchNormalization, *argv, **kwargs)

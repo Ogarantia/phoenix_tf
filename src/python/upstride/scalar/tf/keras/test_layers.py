@@ -4,7 +4,7 @@ from upstride.type_generic.custom_op import upstride_ops
 
 
 def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias):
-  input_upstride = tf.random.uniform((3,  # N (batch size)
+  input_upstride = tf.random.uniform((2,  # N (batch size)
                                       in_channels,  # C
                                       img_size,  # H
                                       img_size),  # W
@@ -25,7 +25,7 @@ def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use
 
 
 def get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias):
-  input_upstride = tf.random.normal((3,  # N (batch size)
+  input_upstride = tf.random.normal((2,  # N (batch size)
                                      in_channels,  # C
                                      img_size,  # H
                                      img_size),  # W
@@ -151,6 +151,7 @@ class TestConv2D(unittest.TestCase):
              [0.,  -9.,  -3., -10.],
              [4.,  -8.,  -4.,  -7.],
              [4.,   0.,   5.,  -4.]]]])
+
     else:
       inputs_channels_first = tf.cast(tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
       filters_upstride = tf.cast(tf.random.uniform((out_channels, in_channels // groups, filter_size, filter_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)

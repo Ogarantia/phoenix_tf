@@ -12,6 +12,26 @@ def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
   return [c1, c2, c3, c4]
 
 
+def get_gradient_and_output(inputs, function, kernels):
+  if type(inputs) == list: # TENSORFLOW
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch(kernels)
+      for e in inputs:
+        gt.watch(e)
+      outputs = function(inputs, kernels)
+      outputs = [tf.transpose(outputs[i], [0, 3, 1, 2]) for i in range(len(outputs))]
+    dinputs = [gt.gradient(outputs, e) for e in inputs]
+    dinputs = [tf.transpose(dinputs[i], [0, 3, 1, 2]) for i in range(len(dinputs))]
+  else: # UPSTRIDE
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch(kernels)
+      gt.watch(inputs)
+      outputs = function(inputs, kernels)
+    dinputs = gt.gradient(outputs, inputs)
+  dkernels = gt.gradient(outputs, kernels)
+  return dinputs, dkernels, outputs
+
+
 class TestType2LayersTF2Upstride(unittest.TestCase):
   def test_rgb_in_img(self):
     x = tf.convert_to_tensor(np.zeros((2, 640, 480, 3), dtype=np.float32))
@@ -111,33 +131,41 @@ class TestType2Conv2D(unittest.TestCase):
   def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
     # initialize inputs
     tf.random.set_seed(45)
-    inputs = [tf.random.uniform((1, img_size, img_size, in_channels), dtype=tf.float32, minval=-5, maxval=5) for _ in range(4)]
-    upstride_inputs = tf.concat([tf.transpose(_, [0, 3, 1, 2]) for _ in inputs], axis=0)
+    py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
+    py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
+    cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
-    # set up upstride convolution operation
-    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations,
-                           use_bias=use_bias, bias_initializer=tf.keras.initializers.RandomUniform())
+    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=False)
 
-    upstride_conv(upstride_inputs)  # runs a first time to initialize the kernel
+    upstride_conv(cpp_inputs) # runs a first time to initialize the kernel
+    upstride_conv.set_weights([tf.cast(tf.random.uniform(upstride_conv.kernel.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)])
     kernels = upstride_conv.kernel  # copies the quaternion kernel
-    bias = upstride_conv.bias
 
-    # compute ground truth (reference) output
-    def tf_op(i, k):
-      # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
-      k = tf.transpose(k, [2, 3, 1, 0])
-      output = tf.nn.conv2d(i, k, strides=strides, padding=padding, dilations=dilations)
-      return output
+    def cpp_conv(inputs, kernels):
+      return upstride_conv(inputs)
+
+    def py_conv(inputs, kernels):
+      def tf_op(i, k):
+        # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
+        k = tf.transpose(k, [2, 3, 1, 0])
+        output = tf.nn.conv2d(i, k, strides=strides, padding=padding, dilations=dilations)
+        return output
+      return quaternion_mult_naive(tf_op, inputs, kernels)
+
+    dinput_test, dkernels_test, output_test = get_gradient_and_output(cpp_inputs, cpp_conv, kernels)
+    dinput_ref, dkernels_ref, output_ref = get_gradient_and_output(py_inputs, py_conv, kernels)
+
+    output_ref_concat = tf.concat(output_ref, axis=0)
+    err_output = tf.math.reduce_max(tf.math.abs(output_test - output_ref_concat))
+    self.assertLess(err_output, 1e-4, f"Absolute output difference compared to the reference is too big: {err_output}")
     
-    reference_outputs = quaternion_mult_naive(tf_op, inputs, kernels, bias if use_bias else (0, 0, 0, 0))
-    reference_outputs = tf.concat([tf.transpose(_, [0, 3, 1, 2]) for _ in reference_outputs], axis=0)
+    dinput_ref_concat = tf.concat(dinput_ref, axis=0)
+    err_dinput = tf.math.reduce_max(tf.math.abs(dinput_test - dinput_ref_concat))
+    self.assertLess(err_dinput, 1e-4, f"Absolute d_input difference compared to the reference is too big: {err_dinput}")
 
-    # compute test outputs
-    upstride_outputs = upstride_conv(upstride_inputs)
-
-    # compare things
-    error = tf.math.reduce_max(tf.math.abs(reference_outputs - upstride_outputs))
-    self.assertLess(error, 1e-4, f"Absolute d_input difference compared to the reference is too big: {error}")
+    dkernels_ref_concat = tf.concat(dkernels_ref, axis=0)
+    err_dkernels = tf.math.reduce_max(tf.math.abs(dkernels_test - dkernels_ref_concat))
+    self.assertLess(err_dkernels, 1e-4, f"Absolute d_kernels difference compared to the reference is too big: {err_dkernels}")
 
   def test_upstride_inputs_backprop(self):
     try:

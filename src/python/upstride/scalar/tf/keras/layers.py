@@ -41,6 +41,7 @@ class Upstride2TF(Layer):
   """
 
   def __init__(self, strategy=''):
+    pass
 
   def __call__(self, x):
     return x

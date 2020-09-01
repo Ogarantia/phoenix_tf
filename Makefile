@@ -45,3 +45,7 @@ run_nsight:
 
 copy_so:
 	@cp build/libs/_upstride.so src/python/upstride/type_generic
+	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
+
+docker:
+	@docker build -t eu.gcr.io/fluid-door-230710/upstride:$(shell cat VERSION)-tf2.3.0-gpu -f dockerfiles/dockerfile .

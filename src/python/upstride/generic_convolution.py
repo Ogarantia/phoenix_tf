@@ -8,6 +8,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops, nn
 from .type_generic.custom_op import upstride_conv2d
 from .type_generic.tf.keras.layers import SCALAR, upstride_type_to_dimension
+from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
 
 layers = tf.keras.layers
 
@@ -32,6 +33,13 @@ class GenericConv2D(layers.Conv2D):
                bias_constraint=None,
                require_input_grad=True,
                **kwargs):
+    # constructor of layers.Conv2D will call initializers.get but we want to be able to send our custom initializers.
+    # Here the trick is to change the kernel_initializer to "glorot uniform" and rechange it after
+    self.type2_init = False
+    if is_type2_init(kernel_initializer):
+      self.type2_init = True
+      self.saved_kernel_initializer = kernel_initializer
+      kernel_initializer = 'glorot_uniform'
     super().__init__(filters,
                      kernel_size,
                      strides=strides,
@@ -63,6 +71,13 @@ class GenericConv2D(layers.Conv2D):
           'of groups. Received groups={}, but the input has {} channels '
           '(full input shape is {}).'.format(self.groups, input_channel,
                                              input_shape))
+
+    # change initializer if needed
+    if self.type2_init:
+      self.kernel_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel,
+                                                 weight_dim=self.rank, nb_filters=self.filters,
+                                                 criterion=self.saved_kernel_initializer.split("_")[-1], seed=None,
+                                                 part_index=0)
 
     # setup kernel tensor shape
     if self.upstride_datatype == SCALAR:
@@ -105,8 +120,9 @@ class GenericConv2D(layers.Conv2D):
       tf_padding = self.padding.upper()
     else:
       tf_padding = self.padding
-    tf_dilations = list(self.dilation_rate)
-    tf_strides = list(self.strides)
+    self.tf_padding = tf_padding
+    self.tf_dilations = list(self.dilation_rate)
+    self.tf_strides = list(self.strides)
 
     self.built = True
 

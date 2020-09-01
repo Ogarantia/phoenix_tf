@@ -28,6 +28,7 @@ import warnings
 
 import numpy as np
 
+import tensorflow as tf
 from tensorflow.python.eager import backprop
 from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
@@ -55,8 +56,8 @@ from tensorflow.python.platform import tf_logging
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import nest
 from tensorflow.python.util import tf_inspect
-from .utils import quaternion_mult, is_quaternion_init
-from .initializers import QInitializerDense
+from .utils import quaternion_mult
+from .initializers import QInitializerDense, is_type2_init
 
 
 class Masking(Layer):
@@ -1139,13 +1140,13 @@ class Dense(Layer):
     if not (dtype.is_floating or dtype.is_complex):
       raise TypeError('Unable to build `Dense` layer with non-floating point '
                       'dtype %s' % (dtype,))
-    input_shape = tensor_shape.TensorShape(input_shape[0])
+    input_shape = tensor_shape.TensorShape(input_shape)
     if tensor_shape.dimension_value(input_shape[-1]) is None:
       raise ValueError('The last dimension of the inputs to `Dense` '
                        'should be defined. Found `None`.')
     last_dim = tensor_shape.dimension_value(input_shape[-1])
 
-    if is_quaternion_init(self.kernel_initializer_type):
+    if is_type2_init(self.kernel_initializer_type):
       self.kernel_initializer = QInitializerDense(shape=(input_shape[-1], self.units),
                                                   criterion=self.kernel_initializer_type.split("_")[-1])
     else:
@@ -1153,7 +1154,7 @@ class Dense(Layer):
 
     self.kernels = []
     for i in range(4):
-      if is_quaternion_init(self.kernel_initializer_type):
+      if is_type2_init(self.kernel_initializer_type):
         self.kernel_initializer.part_index = i
       self.kernels.append(self.add_weight(
           f'kernel_{i}',
@@ -1179,6 +1180,8 @@ class Dense(Layer):
     self.built = True
 
   def call(self, inputs):
+    # inputs is [BS*4, R] convert to 4* [BS, R]
+    inputs = tf.split(inputs, 4)
     rank = inputs[0].shape.rank
     outputs = []
     if rank is not None and rank > 2:
@@ -1204,6 +1207,9 @@ class Dense(Layer):
     if self.activation is not None:
       for i in range(4):
         outputs[i] = self.activation(outputs[i])  # pylint: disable=not-callable
+
+    # output need to be [BS*4, R']
+    outputs = tf.concat(outputs, 0)
     return outputs
 
   def compute_output_shape(self, input_shape):

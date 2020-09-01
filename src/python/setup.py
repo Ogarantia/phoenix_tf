@@ -1,18 +1,17 @@
 import setuptools
 
-with open("README.md", "r") as fh:
-  long_description = fh.read()
-
 setuptools.setup(
     name="upstride",
     version="2.0",
     author="UpStride S.A.S",
     author_email="hello@upstride.io",
-    description="A package to use Geometrical Algebra in pure tensorflow",
-    long_description=long_description,
+    description="A package to use UpStride Tech in tensorflow",
+    long_description="",
     long_description_content_type="text/markdown",
     url="https://upstride.io",
     packages=setuptools.find_packages(),
+    include_package_data=True,
+    package_data={'': ['_upstride.so', 'libdnnl.so.1']},
     classifiers=[
         'Development Status :: 1 - Beta',
         'Intended Audience :: Developers',

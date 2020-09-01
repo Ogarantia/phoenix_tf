@@ -198,8 +198,8 @@ class DepthwiseConv2D(Conv2D):
     #                           input_dim,
     #                           self.depth_multiplier)
     # in upstride, the order need to be (o, g, h, w)
-    depthwise_kernel_shape = (1, # number of output channels per group
-                              self.depth_multiplier, # number of groups, so number of channels for depth wise conv 
+    depthwise_kernel_shape = (1,  # number of output channels per group
+                              self.depth_multiplier,  # number of groups, so number of channels for depth wise conv
                               self.kernel_size[0],
                               self.kernel_size[1])
 
@@ -241,6 +241,7 @@ class DepthwiseConv2D(Conv2D):
 
     return outputs
 
+
 class MaxNormPooling2D(Layer):
   """ Max Pooling layer for quaternions which considers the norm of quaternions to choose the quaternions
   which exhibits maximum norm within a small window of pool size.
@@ -280,6 +281,7 @@ class MaxNormPooling2D(Layer):
     self.norm_type = norm_type
 
   def call(self, inputs):
+    inputs = tf.split(inputs, 4)
     inputs = [tf.expand_dims(inputs[i], -1) for i in range(len(inputs))]
     inputs = tf.keras.layers.concatenate(inputs, axis=-1)
 
@@ -308,7 +310,7 @@ class MaxNormPooling2D(Layer):
 
     pooled = [tf.reshape(tf.gather_nd(inputs[:, i], indices), output_shape) for i in range(4)]
 
-    return pooled
+    return tf.concat(pooled, axis=0)
 
   def get_config(self):
     config = {
@@ -496,11 +498,11 @@ class BatchNormalizationQ(Layer):
     self.moving_mean_initializer = tf.keras.initializers.get(moving_mean_initializer)
 
   def build(self, input_shape):
-    ndim = len(input_shape[0])  # usually 4
+    ndim = len(input_shape)  # usually 4
     # update self.axis
     if self.axis < 0:
       self.axis = ndim + self.axis  # usually 3
-    param_shape = input_shape[0][self.axis]  # 5 for unit-tests
+    param_shape = input_shape[self.axis]  # 5 for unit-tests
     if param_shape is None:
       raise ValueError(f'Axis {self.axis} of input tensor should have a defined dimension '
                        f'but the layer received an input with shape {input_shape}.')
@@ -523,19 +525,20 @@ class BatchNormalizationQ(Layer):
     self.moving_mean = []
     for p1 in range(4):
       postfix = dim_names[p1]
-      self.beta[postfix] = self.add_weight(shape=(input_shape[0][self.axis],),
+      self.beta[postfix] = self.add_weight(shape=(input_shape[self.axis],),
                                            name=f'beta{[postfix]}',
                                            initializer=self.beta_initializer,
                                            regularizer=self.beta_regularizer,
                                            constraint=self.beta_constraint)
-      self.moving_mean.append(self.add_weight(shape=(input_shape[0][self.axis],),
+      self.moving_mean.append(self.add_weight(shape=(input_shape[self.axis],),
                                               initializer=self.moving_mean_initializer,
                                               name=f'moving_mean{[postfix]}',
                                               trainable=False))
     self.built = True
 
   def call(self, inputs, training=None):
-    # inputs is an array of 4 tensors
+    # split inputs is an array of 4 tensors
+    inputs = tf.split(inputs, 4)
     input_shape = inputs[0].shape  # typically [BS, H, W, C]. For unittest (1,2,3,5)
     ndims = len(input_shape)  # typically 4
     reduction_axes = [i for i in range(ndims) if i != self.axis]  # [0, 1, 2]
@@ -574,7 +577,7 @@ class BatchNormalizationQ(Layer):
     )  # unittest shape : 4* shape=(1, 2, 3, 5)
     training_value = tf_utils.constant_value(training)
     if training_value == False:  # not the same as "not training_value" because of possible none
-      return input_bn
+      return tf.concat(input_bn, axis=0)
 
     update_list = []
     for i in range(4):
@@ -590,15 +593,14 @@ class BatchNormalizationQ(Layer):
         inference_centred = [inputs[i] - tf.reshape(self.moving_mean[i], broadcast_mu_shape) for i in range(4)]
       else:
         inference_centred = inputs
-      return quaternion_bn(
+      return tf.concat(quaternion_bn(
           inference_centred, self.moving_V,
           self.beta,
           self.gamma,
-          axis=self.axis
-      )
+          axis=self.axis), axis=0)
 
     # Pick the normalized form corresponding to the training phase.
-    return tf.keras.backend.in_train_phase(input_bn, normalize_inference, training=training)
+    return tf.concat(tf.keras.backend.in_train_phase(input_bn, normalize_inference, training=training), axis=0)
 
   def get_config(self):
     config = {
