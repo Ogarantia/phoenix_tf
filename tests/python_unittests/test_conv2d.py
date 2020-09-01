@@ -2,43 +2,69 @@ import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
 
+def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias):
+  input_upstride = tf.random.uniform((1, # N
+                                   in_channels, # C
+                                   img_size, # H
+                                   img_size), # W
+                                   dtype=tf.float32, minval=-0.5, maxval=0.5)
+  filter_upstride = tf.random.uniform((out_channels, # channel multiplier or channels per groups. for depthwise conv, 1 channel per groups
+                                      in_channels, # C number of channel or number of groups
+                                      filter_size, # H
+                                      filter_size), # W
+                                      dtype=tf.float32, minval=-0.5, maxval=0.5)
+  input_tf = tf.transpose(input_upstride, [0, 2, 3, 1]) # input is now [N  H  W  C]
+  filter_tf = tf.transpose(filter_upstride, [2, 3, 1, 0])
+
+  if (use_bias):
+    bias = tf.random.uniform((out_channels,1),dtype=tf.float32, minval=-0.5, maxval=0.5)
+    bias = tf.reshape(bias,[out_channels])
+  else:
+    bias = []
+  return input_upstride, filter_upstride, input_tf, filter_tf, bias
+
 class TestConv2D(unittest.TestCase):
-    def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1]):
+    def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, use_bias=False, padding='VALID', strides=[1, 1], dilations=[1, 1]):
         """ Runs a single convolution and compares the result with TensorFlow output """
-        filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
-        input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
+        input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
 
         # run upstride convolution
-        output_test = upstride_ops.upstride_conv2d(
-          input, filter,
-          strides=strides,
-          padding=padding,
-          dilations=dilations,
-          data_format='NCHW'
+        output_upstride = upstride_ops.upstride_conv2d(
+                              input_upstride, filter_upstride, bias,
+                              use_bias=use_bias,
+                              strides=strides,
+                              padding=padding,
+                              dilations=dilations,
+                              data_format='NCHW'
         )
 
         # run TF convolution on a properly transposed input
-        input = tf.transpose(input, [0, 2, 3, 1])
-        filter = tf.transpose(filter, [2, 3, 1, 0])
-        output_ref = tf.nn.conv2d(
-          input, filter,
+        output_tf = tf.nn.conv2d(
+          input_tf, filter_tf,
           strides=strides,
           padding=padding,
           dilations=dilations
         )
+        if (use_bias):
+          output_tf= tf.nn.bias_add(output_tf,bias)
+
         # compare the outputs
-        output_ref = tf.transpose(output_ref, [0, 3, 1, 2])
-        err = tf.math.reduce_max(tf.math.abs(output_test - output_ref))
+        output_tf = tf.transpose(output_tf, [0, 3, 1, 2])
+        err = tf.math.reduce_max(tf.math.abs(output_upstride - output_tf))
         self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
         print('[Conv2DFwd] Absolute difference:', err.numpy())
 
-
     def test_conv2d(self):
         self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
+        self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, use_bias=True, padding='VALID')
         self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME')
+        self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, use_bias=True,padding='SAME')
         self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2])
+        self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, use_bias=True,strides=[2, 2])
         self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, dilations=[2, 2])
+        self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, use_bias=True,dilations=[2, 2])
         self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, padding='SAME', strides=[1, 2], dilations=[3, 4])
+        self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, use_bias=True, padding='SAME', strides=[1, 2], dilations=[3, 4])
 
 
     def test_conv2d_grouped(self, img_size=5, filter_size=3, in_channels=4, out_channels=6, padding='VALID', strides=[1, 1], dilations=[1, 1], groups=2):
@@ -132,7 +158,7 @@ class TestConv2D(unittest.TestCase):
           gt.watch(filters_upstride)
           gt.watch(inputs_channels_first)
           output_test = upstride_ops.upstride_conv2d(
-            inputs_channels_first, filters_upstride,
+            inputs_channels_first, filters_upstride, [],
             strides=strides,
             padding=padding,
             dilations=dilations,
@@ -152,42 +178,38 @@ class TestConv2D(unittest.TestCase):
 
 
 class TestConv2DGrad(unittest.TestCase):
-    def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1,1], dilations=[1,1]):
+    def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, use_bias=False, padding='SAME', strides=[1,1], dilations=[1,1]):
       """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
-      input = tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
-      filter = tf.random.uniform((out_channels, in_channels, filter_size, filter_size), dtype=tf.float32, minval=-0.5, maxval=0.5)
+      input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
 
       ## UPSTRIDE
       with tf.GradientTape(persistent=True) as gt:
-        gt.watch(filter)
-        gt.watch(input)
-        output_test = upstride_ops.upstride_conv2d(
-                  input, filter,
+        gt.watch(filter_upstride)
+        gt.watch(input_upstride)
+        output_upstride = upstride_ops.upstride_conv2d(
+                  input_upstride, filter_upstride,bias,
+                  use_bias=use_bias,
                   strides=strides,
                   padding=padding,
                   dilations=dilations,
                   data_format='NCHW')
-      grad_test_filter = gt.gradient(output_test, filter)
-      grad_test_input = gt.gradient(output_test, input)
+      grad_test_filter = gt.gradient(output_upstride, filter_upstride)
+      grad_test_input = gt.gradient(output_upstride, input_upstride)
 
       ## TENSORFLOW
-      # #                            N  H  W  C
-      input_t = tf.transpose(input, [0, 2, 3, 1])
-      # #                              H  W  I  O
-      filter_t = tf.transpose(filter, [2, 3, 1, 0])
-      input_t = tf.identity(input_t)
-      filter_t = tf.identity(filter_t)
+      input_tf = tf.identity(input_tf)
+      filter_tf = tf.identity(filter_tf)
       with tf.GradientTape(persistent=True) as gt:
-        gt.watch(filter_t)
-        gt.watch(input_t)
-        output_ref_TF = tf.nn.conv2d(
-                  input_t, filter_t,
+        gt.watch(filter_tf)
+        gt.watch(input_tf)
+        output_tf_TF = tf.nn.conv2d(
+                  input_tf, filter_tf,
                   strides=strides,
                   padding=padding,
                   dilations=dilations) 
 
-      grad_reference_filter_TF = gt.gradient(output_ref_TF, filter_t)
-      grad_reference_input_TF = gt.gradient(output_ref_TF, input_t)
+      grad_reference_filter_TF = gt.gradient(output_tf_TF, filter_tf)
+      grad_reference_input_TF = gt.gradient(output_tf_TF, input_tf)
       #                                                                  O  I  H  W 
       grad_reference_filter_TF = tf.transpose(grad_reference_filter_TF, [3, 2, 0, 1])
       grad_reference_input_TF = tf.transpose(grad_reference_input_TF, [0, 3, 1, 2])

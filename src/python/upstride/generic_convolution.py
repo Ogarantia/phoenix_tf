@@ -114,34 +114,15 @@ class GenericConv2D(layers.Conv2D):
     if self._is_causal:  # Apply causal padding to inputs for Conv1D.
       inputs = array_ops.pad(inputs, self._compute_causal_padding(inputs))
 
-    output = self.upstride_conv_op(inputs, self.kernel, uptype=self.upstride_datatype, strides=self.strides,
-                                    dilations=self.dilation_rate, padding=self.padding.upper(), data_format=self.data_format, name=self.name, require_input_grad=self.require_input_grad)
-
-    # TODO gros todo, for now it doesn't work
-    if self.use_bias:
-      raise NotImplementedError("hello, the bias it not implemented")
-      # if self.data_format == 'channels_first':
-      #   if self.rank == 1:
-      #     # nn.bias_add does not accept a 1D input tensor.
-      #     bias = array_ops.reshape(self.bias, (1, self.filters, 1))
-      #     outputs += bias
-      #   if self.rank == 2:
-      #     outputs = nn.bias_add(outputs, self.bias, data_format='NCHW')
-      #   if self.rank == 3:
-      #     # As of Mar 2017, direct addition is significantly slower than
-      #     # bias_add when computing gradients. To use bias_add, we collapse Z
-      #     # and Y into a single dimension to obtain a 4D input tensor.
-      #     outputs_shape = outputs.shape.as_list()
-      #     if outputs_shape[0] is None:
-      #       outputs_shape[0] = -1
-      #     outputs_4d = array_ops.reshape(outputs,
-      #                                    [outputs_shape[0], outputs_shape[1],
-      #                                     outputs_shape[2] * outputs_shape[3],
-      #                                     outputs_shape[4]])
-      #     outputs_4d = nn.bias_add(outputs_4d, self.bias, data_format='NCHW')
-      #     outputs = array_ops.reshape(outputs_4d, outputs_shape)
-      # else:
-      #   outputs = nn.bias_add(outputs, self.bias, data_format='NHWC')
+    output = self.upstride_conv_op(inputs, self.kernel, self.bias if self.use_bias else [],
+                                   uptype=self.upstride_datatype,
+                                   strides=self.strides,
+                                   dilations=self.dilation_rate,
+                                   padding=self.padding.upper(),
+                                   data_format=self.data_format,
+                                   name=self.name,
+                                   require_input_grad=self.require_input_grad,
+                                   use_bias=self.use_bias)
 
     if self.activation is not None:
       return self.activation(output)

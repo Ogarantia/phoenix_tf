@@ -1,6 +1,5 @@
 SOURCE_PATH=src
 CORE_SOURCE_PATH=core/src
-
 .PHONY : default
 
 

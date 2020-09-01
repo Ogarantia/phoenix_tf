@@ -29,7 +29,8 @@ template <typename Device, typename T>
 class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2DFunctor<Device, T> {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
-        INPUT_FILTER_IDX = 1;  //!< index of the input tensor containing the filter
+        INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
+        INPUT_BIAS_IDX = 2;    //!< index of the input tensor containing the bias
 
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
@@ -38,6 +39,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     upstride::IntTuple stride;
     upstride::IntTuple dilation;
     int groups;
+    bool useBias;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context), algebra(upstride::frontend_tf::getAlgebra(context)) {
@@ -56,6 +58,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
+        OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
 
         // configure the operation backend
         //FIXME: Check status and throw an exception
@@ -87,7 +90,13 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             OutputTensorTF<Device, T> output(context, device, outShape);
 
             // execute the operation
-            (*this)(input, filter, output, padBefore, padAfter, groups);
+            if (useBias) {
+                InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
+                (*this)(input, filter, &bias, output, padBefore, padAfter, groups);
+            }
+            else {
+                (*this)(input, filter, nullptr, output, padBefore, padAfter, groups);
+            }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }

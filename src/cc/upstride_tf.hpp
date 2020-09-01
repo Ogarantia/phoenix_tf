@@ -3,6 +3,7 @@
 
 #include "tensorflow_includes.hpp"
 #include "utils.hpp"
+#include <stdexcept>
 
 namespace upstride {
 namespace frontend_tf {
