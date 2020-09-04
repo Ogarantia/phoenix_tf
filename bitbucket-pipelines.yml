@@ -14,8 +14,8 @@ pipelines:
             - build-folder    # cache build folder with the compiled binaries
           script:
             - apt update && apt install -y git cmake
-            - dpkg -i toolchain/gcc-8.4_8.4-1_amd64.deb
             - git submodule update --init --recursive
+            - dpkg -i core/toolchain/gcc-8.4_8.4-1_amd64.deb
             - find core/thirdparty -type f -exec touch -t 202009040101 {} +
             - mkdir -p build && cd build
             - CC=/usr/local/bin/gcc8.4 CXX=/usr/local/bin/g++8.4 cmake -DWITH_CUDNN=OFF ..
