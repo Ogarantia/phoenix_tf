@@ -8,11 +8,11 @@ default:
 	@make -s build/*.so
 	@make copy_so
 
-build/*.so : build $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
+build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
 	@cd build && make VERBOSE=0 -j`nproc`
 
 # generates Makefile using CMake
-build: CMakeLists.txt
+build/Makefile: CMakeLists.txt
 	@mkdir -p build
 	@cd build && cmake -DWITH_CUDNN=$(WITH_CUDNN) ..
 
