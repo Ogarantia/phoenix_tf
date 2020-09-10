@@ -135,3 +135,6 @@ REGISTER_OP("UpstrideConv2DGrad")
         c->set_output(1, c->input(2));
         return tensorflow::Status::OK();
     });
+
+
+REGISTER_OP("Wait");

@@ -182,6 +182,41 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
     }
 };
 
+
+/**
+ * @brief A debugging/profiling op blocking until all the CUDA kernels are executed
+ * Has no effect when run on CPU.
+ */
+template<class Device>
+class UpstrideWaitOpKernel : public OpKernel {
+   public:
+    explicit UpstrideWaitOpKernel(OpKernelConstruction* context): OpKernel(context) {}
+
+    void Compute(OpKernelContext* context) override;
+};
+
+
+#ifdef BACKEND_CUDNN
+/**
+ * @brief Specialization of Wait operation for a CUDA device.
+ * Blocks till all the CUDA kernels in a CUDA stream associated with the device are executed.
+ * @param context operation kernel context
+ */
+template<>
+void UpstrideWaitOpKernel<upstride::device::CUDA>::Compute(OpKernelContext* context) {
+    cudaStreamSynchronize(context->eigen_device<Eigen::GpuDevice>().stream());
+}
+#endif
+
+
+/**
+ * @brief Specialization of Wait operation for CPU.
+ * Does nothing.
+ */
+template<>
+void UpstrideWaitOpKernel<upstride::device::CPU>::Compute(OpKernelContext*) {}
+
+
 // Register the CPU kernels.
 #define REGISTER_UPSTRIDE_OP(T, CPU_OR_GPU, DEVICE, OP_NAME)               \
     REGISTER_KERNEL_BUILDER(                                               \
@@ -192,9 +227,13 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2DGrad);
 
+REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_CPU), UpstrideWaitOpKernel<upstride::device::CPU>);
+
 // Register the GPU kernels.
 #ifdef BACKEND_CUDNN
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2DGrad);
+
+REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_GPU), UpstrideWaitOpKernel<upstride::device::CUDA>);
 #endif
 }  // namespace tensorflow

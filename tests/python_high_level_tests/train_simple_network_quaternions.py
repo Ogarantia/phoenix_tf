@@ -2,8 +2,6 @@ import tensorflow as tf
 import argparse
 import sys
 
-# tf.debugging.experimental.enable_dump_debug_info("/tmp/log", tensor_debug_mode="FULL_HEALTH", circular_buffer_size=-1)
-
 sys.path.append('../../src/python')
 
 
@@ -47,6 +45,9 @@ def main():
 
   parser = argparse.ArgumentParser()
   parser.add_argument('--upstride', "-u", type=int, default=1, help='')
+  parser.add_argument('--logdir', "-ld", type=str, default="/tmp/log", help='')
+  parser.add_argument('--epochs', "-e", type=int, default=60, help='')
+  parser.add_argument('--batch_size', "-bs", type=int, default=1000, help='')
   args = parser.parse_args()
 
   # prepare CIFAR10
@@ -62,16 +63,15 @@ def main():
                 loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
-  # g-g-go
-  tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir='/tmp/log', histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+  tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir=args.logdir, histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+
   model.fit(x_train, y_train,
-            epochs=60,
-            batch_size=128,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
             validation_data=(x_test, y_test),
             callbacks=[tensorboard_cb,
                        tf.keras.callbacks.TerminateOnNaN()
                        ])
-
 
 if __name__ == "__main__":
   main()

@@ -11,7 +11,7 @@ from upstride.type_generic.tf.keras.layers import TYPE2
 
 from .... import generic_layers
 from ....generic_layers import *
-from .dense import Dense
+#from .dense import Dense
 
 generic_layers.upstride_type = 0
 generic_layers.blade_indexes = [""]
