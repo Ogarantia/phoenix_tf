@@ -67,11 +67,19 @@ REGISTER_OP("UpstrideConv2D")
             if (!getSpatialStep(tuple, 1, dilation))
                 return tensorflow::errors::InvalidArgument("Invalid dilations");
 
+            // proceed with shape inference
             using namespace upstride::frontend_tf;
             tensorflow::shape_inference::DimensionHandle outWidth, outHeight;
+            tensorflow::shape_inference::ShapeHandle filterShape;
             auto inputShape = ctx->input(INPUT_IDX);
-            auto filterShape = ctx->input(FILTER_IDX);
 
+            // check filter rank
+            if (!ctx->WithRank(ctx->input(FILTER_IDX), upstride::Conv2DKernelLayout::rank(algebra), &filterShape).ok())
+                return tensorflow::errors::InvalidArgument("Kernel rank mismatch: a tensor of " +
+                                                           std::to_string(upstride::Conv2DKernelLayout::rank(algebra)) +
+                                                           " dimensions expected");
+
+            // infer output shape
             auto result = upstride::frontend_tf::computeWindowedOutputSize(ctx,
                 ctx->Dim(inputShape, getWidthDimensionNumber(dataFormat)),
                 ctx->Dim(filterShape, upstride::Conv2DKernelLayout::widthDim(algebra)),
@@ -86,6 +94,7 @@ REGISTER_OP("UpstrideConv2D")
             if (!result.ok())
                 return result;
 
+            // write out the inferred shape
             switch (dataFormat) {
                 case upstride::DataFormat::NCHW:
                     ctx->set_output(0, ctx->MakeShape({

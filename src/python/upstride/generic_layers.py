@@ -410,7 +410,8 @@ class Concatenate(GenericNonLinear):
 
 class SplittedNonLinear:
   def __init__(self, layer, *argv, **kwargs):
-    self.layers = [layer(*argv, **kwargs) for _ in range(len(blade_indexes))]
+    # get_layers is needed for changing the name of the layer if defined by the user
+    self.layers, _, _ = get_layers(layer, *argv, **kwargs)
 
   def __call__(self, inputs):
     inputs = tf.split(inputs, len(blade_indexes))

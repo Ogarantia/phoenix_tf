@@ -4,11 +4,31 @@
 
 namespace tensorflow {
 
+/**
+ * @brief Retrieves a Context instance.
+ * @tparam Device   the device type
+ * @return a context instance.
+ */
 template<typename Device>
-inline const Device& fromTensorflowDevice(OpKernelContext* context);
+inline upstride::Context& getContextInstance();
+
+/**
+ * @brief Retrieves a Device instance from an OpKernelContext instance.
+ * @tparam Device   the device type
+ * @param context   The OpKernelContext instance
+ * @return the device instance.
+ */
+template<typename Device>
+inline Device& fromTensorflowDevice(OpKernelContext* context);
 
 template<>
-inline const upstride::device::CPU& fromTensorflowDevice(OpKernelContext* context) {
+inline upstride::Context& getContextInstance<upstride::device::CPU>() {
+    static upstride::onednn::Context context;
+    return context;
+}
+
+template<>
+inline upstride::device::CPU& fromTensorflowDevice(OpKernelContext* context) {
     // nothing special to do here
     static upstride::device::CPU device;
     return device;
@@ -16,10 +36,16 @@ inline const upstride::device::CPU& fromTensorflowDevice(OpKernelContext* contex
 
 #ifdef BACKEND_CUDNN
 template<>
-inline const upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
+inline upstride::Context& getContextInstance<upstride::device::CUDA>() {
+    static upstride::cudnn::Context context;
+    return context;
+}
+
+template<>
+inline upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
     auto stream = context->eigen_device<Eigen::GpuDevice>().stream();
     // CUDA devices are identified by their streams
-    return upstride::cudnn::Context::getInstance().registerDevice(stream);
+    return static_cast<upstride::cudnn::Context&>(getContextInstance<upstride::device::CUDA>()).registerDevice(stream);
 }
 #endif
 
@@ -42,7 +68,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     bool useBias;
 
    public:
-    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context), algebra(upstride::frontend_tf::getAlgebra(context)) {
+    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context), upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>()), algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -73,7 +99,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         using namespace upstride::frontend_tf;
 
         try {
-            const Device& device(fromTensorflowDevice<Device>(context));
+            Device& device(fromTensorflowDevice<Device>(context));
 
             // grab inputs
             InputTensorTF<Device, T> input(context, device, INPUT_IMAGE_IDX);
@@ -92,10 +118,10 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             // execute the operation
             if (useBias) {
                 InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
-                (*this)(input, filter, &bias, output, padBefore, padAfter, groups);
+                (*this)(device, input, filter, &bias, output, padBefore, padAfter, groups);
             }
             else {
-                (*this)(input, filter, nullptr, output, padBefore, padAfter, groups);
+                (*this)(device, input, filter, nullptr, output, padBefore, padAfter, groups);
             }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
@@ -123,7 +149,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
-    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context), algebra(upstride::frontend_tf::getAlgebra(context)) {
+    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context), upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>()), algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -156,7 +182,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         using namespace upstride::frontend_tf;
 
         try {
-            const Device& device(fromTensorflowDevice<Device>(context));
+            Device& device(fromTensorflowDevice<Device>(context));
 
             // grab inputs
             InputTensorTF<Device, T> grad(context, device, INPUT_GRAD_IDX);
@@ -175,7 +201,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
-            (*this)(input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
+            (*this)(device, input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }

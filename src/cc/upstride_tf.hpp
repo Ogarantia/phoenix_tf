@@ -109,7 +109,7 @@ class InputTensorTF : public Tensor<Device, const T> {
      * @param device  Device descriptor the tensor is stored on
      * @param idx Index of the tensor to get in the context
      */
-    InputTensorTF(tensorflow::OpKernelContext* context, const Device& device, const int idx) : Tensor<Device, const T>(device, toUpstrideShape(context->input(idx).shape()),
+    InputTensorTF(tensorflow::OpKernelContext* context, Device& device, const int idx) : Tensor<Device, const T>(device, toUpstrideShape(context->input(idx).shape()),
                                                                                                                        context->input(idx).flat<T>().data()) {}
 };
 
@@ -137,7 +137,7 @@ class OutputTensorTF : public Tensor<Device, T> {
      * @param shape     Output tensor shape
      * @param idx       Operation output index
      */
-    OutputTensorTF(tensorflow::OpKernelContext* context, const Device& device,
+    OutputTensorTF(tensorflow::OpKernelContext* context, Device& device,
                    const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<Device, T>(device, toUpstrideShape(shape),
                                                                                                     getOutputPtr(context, shape, idx)) {}
 };

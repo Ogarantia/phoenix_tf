@@ -1,14 +1,17 @@
 from typing import Dict
 
+import tensorflow as tf
 from tensorflow.keras import initializers
 from tensorflow.keras.layers import Layer
-from tensorflow.python.framework import load_library
+from tensorflow.python.framework import load_library, tensor_shape
 from tensorflow.python.keras.engine import base_layer_utils
-from tensorflow.python.keras.utils import tf_utils
+from tensorflow.python.keras.engine.input_spec import InputSpec
+from tensorflow.python.keras.utils import conv_utils, tf_utils
 from upstride.generic_convolution import GenericConv2D
 from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
 from ....generic_layers import *
+from ....type_generic.tf.keras.layers import upstride_type_to_dimension
 from .dense import Dense
 
 generic_layers.upstride_type = 2
@@ -175,10 +178,10 @@ class DepthwiseConv2D(Conv2D):
         bias_constraint=bias_constraint,
         **kwargs)
     self.depth_multiplier = depth_multiplier
-    self.depthwise_initializer = initializers.get(depthwise_initializer)
-    self.depthwise_regularizer = regularizers.get(depthwise_regularizer)
-    self.depthwise_constraint = constraints.get(depthwise_constraint)
-    self.bias_initializer = initializers.get(bias_initializer)
+    self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer)
+    self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
+    self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
+    self.bias_initializer = tf.keras.initializers.get(bias_initializer)
 
   def build(self, input_shape):
     if len(input_shape) < 4:
@@ -198,8 +201,9 @@ class DepthwiseConv2D(Conv2D):
     #                           input_dim,
     #                           self.depth_multiplier)
     # in upstride, the order need to be (o, g, h, w)
-    depthwise_kernel_shape = (1,  # number of output channels per group
-                              self.depth_multiplier,  # number of groups, so number of channels for depth wise conv
+    depthwise_kernel_shape = (upstride_type_to_dimension(self.upstride_datatype),
+                              input_dim,  # number of groups, so number of channels for depth wise conv
+                              self.depth_multiplier,  # number of output channels per group
                               self.kernel_size[0],
                               self.kernel_size[1])
 
@@ -211,13 +215,16 @@ class DepthwiseConv2D(Conv2D):
         constraint=self.depthwise_constraint)
 
     if self.use_bias:
-      self.bias = self.add_weight(shape=(input_dim * self.depth_multiplier,),
-                                  initializer=self.bias_initializer,
-                                  name='bias',
-                                  regularizer=self.bias_regularizer,
-                                  constraint=self.bias_constraint)
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(upstride_type_to_dimension(self.upstride_datatype), input_dim * self.depth_multiplier),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          trainable=True,
+          dtype=self.dtype)
     else:
-      self.bias = None
+      self.bias = []
     # Set input spec.
     self.input_spec = InputSpec(ndim=4, axes={channel_axis: input_dim})
     self.built = True
@@ -226,19 +233,17 @@ class DepthwiseConv2D(Conv2D):
     outputs = self.upstride_conv_op(
         inputs,
         self.depthwise_kernel,
+        self.bias,
         uptype=self.upstride_datatype,
         strides=self.strides,
-        padding=self.padding,
-        dilation_rate=self.dilation_rate,
-        data_format=self.data_format,
-        groups=inputs.shape[1])
-
-    if self.use_bias:
-      outputs = backend.bias_add(
-          outputs,
-          self.bias,
-          data_format=self.data_format)
-
+        padding=self.padding.upper(),
+        dilations=self.dilation_rate,
+        data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
+        name=self.name,
+        groups=inputs.shape[1],
+        use_bias=self.use_bias)
+    if self.activation is not None:
+      return self.activation(outputs)
     return outputs
 
 
@@ -271,7 +276,7 @@ class MaxNormPooling2D(Layer):
                data_format=None, name=None, **kwargs):
     super(MaxNormPooling2D, self).__init__(name=name, **kwargs)
     if data_format is None:
-      data_format = backend.image_data_format()
+      data_format = tf.keras.backend.image_data_format()
     if strides is None:
       strides = pool_size
     self.pool_size = conv_utils.normalize_tuple(pool_size, 2, 'pool_size')
