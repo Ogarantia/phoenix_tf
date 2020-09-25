@@ -242,12 +242,23 @@ void UpstrideWaitOpKernel<upstride::device::CUDA>::Compute(OpKernelContext* cont
 template<>
 void UpstrideWaitOpKernel<upstride::device::CPU>::Compute(OpKernelContext*) {}
 
+/**
+ * @brief Macro registering operations kernels
+ * @param TF_TYPE       A TensorFlow datatype of input and output tensor entries
+ * @param CORE_TYPE     Input and output tensor entries datatype used by the core
+ * @param CPU_OR_GPU    "CPU" or "GPU" literally, specifying the frontend device the kernel is implemented for
+ * @param DEVICE        Backend (core) device
+ * @param OP_NAME       Op name
+ */
+#define REGISTER_UPSTRIDE_OP__FULL(TF_TYPE, CORE_TYPE, CPU_OR_GPU, DEVICE, OP_NAME)                  \
+    REGISTER_KERNEL_BUILDER(Name(#OP_NAME).Device(DEVICE_##CPU_OR_GPU).TypeConstraint<TF_TYPE>("T"), \
+                            OP_NAME##OpKernel<upstride::device::DEVICE, CORE_TYPE>)
 
-// Register the CPU kernels.
-#define REGISTER_UPSTRIDE_OP(T, CPU_OR_GPU, DEVICE, OP_NAME)               \
-    REGISTER_KERNEL_BUILDER(                                               \
-        Name(#OP_NAME).Device(DEVICE_##CPU_OR_GPU).TypeConstraint<T>("T"), \
-        OP_NAME##OpKernel<upstride::device::DEVICE, T>);
+/**
+ * @brief A shortcut macro assuming same TF_TYPE and CORE_TYPE
+ */
+#define REGISTER_UPSTRIDE_OP(T, CPU_OR_GPU, DEVICE, OP_NAME) \
+    REGISTER_UPSTRIDE_OP__FULL(T, T, CPU_OR_GPU, DEVICE, OP_NAME)
 
 // Register the CPU kernels.
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2D);
@@ -257,6 +268,10 @@ REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_CPU), UpstrideWaitOpKernel<up
 
 // Register the GPU kernels.
 #ifdef BACKEND_CUDNN
+#ifdef UPSTRIDE_ENABLE_FP16
+REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideConv2D);
+REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideConv2DGrad);
+#endif
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2DGrad);
 

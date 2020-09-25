@@ -3,7 +3,6 @@
 
 #include "tensorflow_includes.hpp"
 #include "utils.hpp"
-#include <stdexcept>
 
 namespace upstride {
 namespace frontend_tf {
@@ -99,48 +98,82 @@ inline tensorflow::Status computeWindowedOutputSize(
     return tensorflow::Status::OK();
 }
 
-template <typename Device, typename T>
-class InputTensorTF : public Tensor<Device, const T> {
+/**
+ * @brief TensorFlow tensor representation
+ * @tparam Device           The device type the tensor is stored on and used by
+ * @tparam tf_type          TensorFlow datatype of tensor entries
+ * @tparam core_type        Internally used (core) datatype of tensor entries
+ */
+template <typename Device, typename tf_type, typename core_type>
+class InputTensorBase : public Tensor<Device, const core_type> {
    public:
     /**
      * @brief Construct a new Tensor object from a Tensorflow input Tensor
-     * 
-     * @param context Tensorflow context
-     * @param device  Device descriptor the tensor is stored on
-     * @param idx Index of the tensor to get in the context
+     * @param context   Tensorflow context
+     * @param device    Device descriptor the tensor is stored on
+     * @param idx       Index of the tensor to get in the context
      */
-    InputTensorTF(tensorflow::OpKernelContext* context, Device& device, const int idx) : Tensor<Device, const T>(device, toUpstrideShape(context->input(idx).shape()),
-                                                                                                                       context->input(idx).flat<T>().data()) {}
+    InputTensorBase(tensorflow::OpKernelContext* context, Device& device, const int idx) :
+        Tensor<Device, const core_type>(
+            device, toUpstrideShape(context->input(idx).shape()),
+            reinterpret_cast<const core_type*>(context->input(idx).flat<tf_type>().data())) {}
 };
 
-/**
- * @brief Tensorflow tensor representation inherit from upstride::tensor
- * 
- * @tparam T Tensorflow Tensor type
- */
 template <typename Device, typename T>
-class OutputTensorTF : public Tensor<Device, T> {
-    static T* getOutputPtr(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape, const int index) {
+class InputTensorTF : public InputTensorBase<Device, T, T> {
+    using InputTensorBase<Device, T, T>::InputTensorBase;
+};
+
+#ifdef BACKEND_CUDNN
+template <>
+class InputTensorTF<upstride::device::CUDA, upstride::cudnn::half>
+    : public InputTensorBase<upstride::device::CUDA, Eigen::half, upstride::cudnn::half> {
+    using InputTensorBase<upstride::device::CUDA, Eigen::half, upstride::cudnn::half>::InputTensorBase;
+};
+#endif
+
+/**
+ * @brief Representation of a writable TensorFlow tensor
+ * @tparam Device           The device type the tensor is stored on and used by
+ * @tparam tf_type          TensorFlow datatype of tensor entries
+ * @tparam core_type        Internally used (core) datatype of tensor entries
+ */
+template <typename Device, typename tf_type, typename core_type>
+class OutputTensorBase : public Tensor<Device, core_type> {
+    static core_type* getOutputPtr(tensorflow::OpKernelContext* context, const tensorflow::TensorShape& shape,
+                                       const int index) {
         tensorflow::Tensor* tensor = nullptr;
         ::tensorflow::Status status(context->allocate_output(index, shape, &tensor));
         if (!TF_PREDICT_TRUE(status.ok()))
             throw std::runtime_error("Cannot allocate output tensor");
-        return tensor->flat<T>().data();
+        return reinterpret_cast<core_type*>(tensor->flat<tf_type>().data());
     }
 
    public:
     /**
      * @brief Wraps an output tensor of a Tensorflow operation in an upstride::tensor
-     * 
      * @param context   Tensorflow OpKernel context
-     * @param device  Device descriptor the tensor is stored on
+     * @param device    Device descriptor the tensor is stored on
      * @param shape     Output tensor shape
      * @param idx       Operation output index
      */
-    OutputTensorTF(tensorflow::OpKernelContext* context, Device& device,
-                   const tensorflow::TensorShape& shape, const int idx = 0) : Tensor<Device, T>(device, toUpstrideShape(shape),
-                                                                                                    getOutputPtr(context, shape, idx)) {}
+    OutputTensorBase(tensorflow::OpKernelContext* context, Device& device, const tensorflow::TensorShape& shape,
+                       const int idx = 0) :
+        Tensor<Device, core_type>(device, toUpstrideShape(shape), getOutputPtr(context, shape, idx)) {}
 };
+
+template <typename Device, typename T>
+class OutputTensorTF : public OutputTensorBase<Device, T, T> {
+    using OutputTensorBase<Device, T, T>::OutputTensorBase;
+};
+
+#ifdef BACKEND_CUDNN
+template <>
+class OutputTensorTF<upstride::device::CUDA, upstride::cudnn::half>
+    : public OutputTensorBase<upstride::device::CUDA, Eigen::half, upstride::cudnn::half> {
+    using OutputTensorBase<upstride::device::CUDA, Eigen::half, upstride::cudnn::half>::OutputTensorBase;
+};
+#endif
 
 }  // namespace frontend_tf
 }  // namespace upstride

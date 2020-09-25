@@ -1,20 +1,27 @@
+ALLOW_VERBOSE ?= ON		# enables verbose messages in the engine when UPSTRIDE_VERBOSE env variable is set to 1 in runtime
+GPU ?= OFF				# enables GPU backend
+
 SOURCE_PATH=src
 CORE_SOURCE_PATH=core/src
-.PHONY : engine distclean clean dev_docker dev_docker_gpu build_nsight run_nsight copy_so docker
-
+.PHONY : engine pre-build distclean clean dev_docker dev_docker_gpu build_nsight run_nsight install docker
 
 # default target building the shared objects and placing them nicely to run tests
 engine:
 	@make -s build/*.so
-	@make copy_so
+	@make install
 
 build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
 	@cd build && make VERBOSE=0 -j`nproc`
 
 # generates Makefile using CMake
+build/Makefile: FP16 ?= ON
 build/Makefile: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake -DWITH_CUDNN=$(if $(GPU),$(GPU),"OFF") ..
+	@cd build && cmake -DWITH_CUDNN=$(GPU) -DALLOW_VERBOSE=$(ALLOW_VERBOSE) -DWITH_FP16=$(FP16) ..
+
+# ensures the options passed by variables are taken into account by cmake
+pre-build:
+	@touch CMakeLists.txt
 
 # removes the build folder
 distclean:
@@ -47,10 +54,13 @@ run_nsight:
     bash
 
 # copy shared objects side-by-side with Python code
-copy_so:
+install:
 	@cp build/libs/_upstride.so src/python/upstride/type_generic
 	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
 
-# build "official" docker image having the Engine as a Python module
-docker:
-	@docker build -t eu.gcr.io/fluid-door-230710/upstride:$(shell cat VERSION)-tf2.3.0-gpu -f dockerfiles/dockerfile .
+# build production docker image having the Engine as a Python module
+docker: ALLOW_VERBOSE=OFF
+docker: GPU=ON
+docker: pre-build build/Makefile
+	@make -s build/*.so install
+	@docker build -t eu.gcr.io/fluid-door-230710/upstride:$(shell cat VERSION)-tf2.3.0-gpu -f dockerfiles/production.dockerfile .

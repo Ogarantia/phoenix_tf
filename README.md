@@ -13,7 +13,7 @@ The Engine has three abstraction levels with:
   * **Intel oneDNN** library optimized for Intel CPUs and also capable of `aarch64`,
   * optional **NVidia cuDNN** library used to run computations on NVidia GPUs.
 
-More details [here](https://upstride.atlassian.net/wiki/spaces/phoenix/pages/405766200/Engine+v2.0+architecture+and+designing+principles).
+More details [here](https://upstride.atlassian.net/wiki/spaces/phoenix/pages/405766200/Engine+v2.0+architecture+and+designing+principles) and in the core submodule readme.
 
 The Engine is written in CUDA, C++11 and Python. CMake is used as the build system. To compile a TensorFlow-compatible version of the Engine we use a specific build of GCC. Its x64 binary is available in `core/toolchain` folder.
 
@@ -64,6 +64,8 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/src/python
 
 #### Compiling with GPU support enabled
 If you are lucky to have an NVidia GPU(s), you can get the engine with the GPU support enabled. In addition to git and docker, you need to have NVidia drivers (check if `nvidia-smi` can find your GPU) and [NVidia container runtime](https://github.com/NVIDIA/nvidia-container-runtime#installation) installed.
+
+The following instructions apply to compile the Engine running on recent GPUs having CUDA compute capability above or equal to 5.3. To compile for an older GPU you need to add `FP16=OFF` option to `make` commands below.
 
 - Clone this repository and its submodules
 - Build the docker image (in the repository root):
@@ -116,6 +118,7 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/bin/g++8.4  100
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src/python
 ```
+
 
 ## Examples
 Train a small quaternion neural network on CIFAR10:

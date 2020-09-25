@@ -8,7 +8,7 @@
     }
 
 REGISTER_OP("UpstrideConv2D")
-    .Attr("T: {int32, float}")
+    .Attr("T: {float16, float32}")
     .Attr("uptype: int = 0")
     .Input("input: T")
     .Input("kernel: T")
@@ -121,7 +121,7 @@ REGISTER_OP("UpstrideConv2D")
     });
 
 REGISTER_OP("UpstrideConv2DGrad")
-    .Attr("T: {int32, float}")
+    .Attr("T: {float16, float32}")
     .Attr("uptype: int = 0")
     .Input("grad: T")
     .Input("input: T")

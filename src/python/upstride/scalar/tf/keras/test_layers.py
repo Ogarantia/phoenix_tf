@@ -1,25 +1,29 @@
 import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
-from upstride.type_generic.test import TestAssert
+from upstride.type_generic.test import TestCase
 
 
-def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias):
+def setUpModule():
+  TestCase.setup()
+
+
+def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32):
   input_upstride = tf.random.uniform((2,  # N (batch size)
                                       in_channels,  # C
                                       img_size,  # H
                                       img_size),  # W
-                                     dtype=tf.float32, minval=-0.5, maxval=0.5)
+                                     dtype=dtype, minval=-0.5, maxval=0.5)
   filter_upstride = tf.random.uniform((out_channels,  # channel multiplier or channels per groups. for depthwise conv, 1 channel per groups
                                        in_channels,  # C number of channel or number of groups
                                        filter_size,  # H
                                        filter_size),  # W
-                                      dtype=tf.float32, minval=-0.5, maxval=0.5)
+                                      dtype=dtype, minval=-0.5, maxval=0.5)
   input_tf = tf.transpose(input_upstride, [0, 2, 3, 1])  # input is now [N  H  W  C]
   filter_tf = tf.transpose(filter_upstride, [2, 3, 1, 0])
 
   if (use_bias):
-    bias = tf.random.uniform((out_channels,), dtype=tf.float32, minval=-0.5, maxval=0.5)
+    bias = tf.random.uniform((out_channels,), dtype=dtype, minval=-0.5, maxval=0.5)
   else:
     bias = []
   return input_upstride, filter_upstride, input_tf, filter_tf, bias
@@ -47,10 +51,10 @@ def get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bia
   return input_upstride, filter_upstride, input_tf, filter_tf, bias
 
 
-class TestConv2D(TestAssert):
-  def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False):
+class TestConv2D(TestCase):
+  def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32):
     """ Runs a single convolution and compares the result with TensorFlow output """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
+    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype)
 
     # run upstride convolution
     output_upstride = upstride_ops.upstride_conv2d(
@@ -72,7 +76,10 @@ class TestConv2D(TestAssert):
 
     # compare the outputs
     output_tf = tf.transpose(output_tf, [0, 3, 1, 2])
-    self.assert_and_print(output_upstride, output_tf, "Conv2DFwd", "output")
+    err = tf.math.reduce_max(tf.math.abs(output_upstride - output_tf))
+    self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
+    print('[Conv2DFwd] Absolute difference:', err.numpy())
+
 
   def test_conv2d(self):
     self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
@@ -85,6 +92,11 @@ class TestConv2D(TestAssert):
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, dilations=[2, 2], use_bias=True)
     self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, padding='SAME', strides=[1, 2], dilations=[3, 4])
     self.run_conv2d_test(img_size=112, filter_size=3, in_channels=32, out_channels=48, padding='SAME', strides=[1, 2], dilations=[3, 4], use_bias=True)
+    # few float16 tests (only on GPU)
+    if tf.test.gpu_device_name():
+      # FIXME: these tests fail on a GPU with CUDA CC < 5.3. Need a reliable way to detect if we run such a GPU
+      self.run_conv2d_test(img_size=224, filter_size=3, in_channels=5, out_channels=32, padding='VALID', use_bias=True, dtype=tf.float16)
+      self.run_conv2d_test(img_size=56, filter_size=3, in_channels=16, out_channels=16, padding='SAME', use_bias=False, dtype=tf.float16)
 
   def test_conv2d_grouped(self, img_size=5, filter_size=3, in_channels=4, out_channels=6, padding='VALID', strides=[1, 1], dilations=[1, 1], groups=2):
     """ Runs a single grouped convolution and compares the result with its expected output """
@@ -193,10 +205,10 @@ class TestConv2D(TestAssert):
     self.assert_and_print(grad_test_inputs_channels_first, grad_ref_inputs_channels_first, "Grouped Conv2DFwd", "dinputs")
 
 
-class TestConv2DGrad(TestAssert):
-  def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
+class TestConv2DGrad(TestCase):
+  def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
+    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype)
 
     # UPSTRIDE
     with tf.GradientTape(persistent=True) as gt:
@@ -260,9 +272,15 @@ class TestConv2DGrad(TestAssert):
     self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2], use_bias=True)
     self.run_conv2dgrad_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID')
     self.run_conv2dgrad_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
+    # few float16 tests (only on GPU)
+    if tf.test.gpu_device_name():
+      # FIXME: these tests fail on a GPU with CUDA CC < 5.3. Need a reliable way to detect if we run such a GPU
+      self.run_conv2dgrad_test(img_size=5, filter_size=2, in_channels=3, out_channels=4, padding='VALID', use_bias=False, dtype=tf.float16)
+      self.run_conv2dgrad_test(img_size=5, filter_size=1, in_channels=8, out_channels=16, padding='VALID', use_bias=True, dtype=tf.float16)
+      self.run_conv2dgrad_test(img_size=7, filter_size=1, in_channels=8, out_channels=16, padding='VALID', use_bias=True, dtype=tf.float16)
 
 
-class TestDepthwiseConv2D(TestAssert):
+class TestDepthwiseConv2D(TestCase):
   def run_conv2d_test(self, img_size=9, filter_size=3, in_channels=64, use_bias=False, padding='VALID', strides=[1, 1, 1, 1], dilations=[1, 1]):
     """ Runs a single convolution and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias)
@@ -307,7 +325,7 @@ class TestDepthwiseConv2D(TestAssert):
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2], use_bias=True)
 
 
-class TestDepthwiseConv2DGrad(TestAssert):
+class TestDepthwiseConv2DGrad(TestCase):
   def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, use_bias=False, padding='SAME', strides=[1, 1, 1, 1], dilations=[1, 1]):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output
     """

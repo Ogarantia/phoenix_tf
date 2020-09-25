@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D
-from upstride.type_generic.test import TestAssert
+from upstride.type_generic.test import TestCase
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
@@ -150,7 +150,7 @@ class TestType2Conv2DBasic(unittest.TestCase):
       self.assertEqual(list(outputs.numpy().flatten()), expected_outputs[i])
 
 
-class TestType2Conv2D(TestAssert):
+class TestType2Conv2D(TestCase):
   """ Implements quaternion convolution unitary testing varying img_size, filter_size, 
       in_channels, out_channels, padding, strides, dilations and use_bias.
   """
@@ -203,20 +203,20 @@ class TestType2Conv2D(TestAssert):
       self.run_test(img_size=1, filter_size=1, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True)
       self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1])
       self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True)
-      self.run_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID')
-      self.run_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID', use_bias=True)
+      self.run_test(img_size=7, filter_size=3, in_channels=2, out_channels=2, padding='VALID')
+      self.run_test(img_size=7, filter_size=3, in_channels=2, out_channels=2, padding='VALID', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID')
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME')
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, strides=[2, 2])
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, strides=[2, 2], use_bias=True)
-      self.run_test(img_size=32, filter_size=3, in_channels=3, out_channels=8, padding='VALID')
-      self.run_test(img_size=32, filter_size=3, in_channels=3, out_channels=8, padding='VALID', use_bias=True)
-      self.run_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, padding='SAME')
-      self.run_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, padding='SAME', use_bias=True)
-      self.run_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2])
-      self.run_test(img_size=32, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2], use_bias=True)
+      self.run_test(img_size=56, filter_size=3, in_channels=3, out_channels=8, padding='VALID')
+      self.run_test(img_size=56, filter_size=3, in_channels=3, out_channels=8, padding='VALID', use_bias=True)
+      self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, padding='SAME')
+      self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, padding='SAME', use_bias=True)
+      self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2])
+      self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2], use_bias=True)
       self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID')
       self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
     finally:
