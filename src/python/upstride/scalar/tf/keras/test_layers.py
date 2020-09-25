@@ -1,6 +1,7 @@
 import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
+from upstride.type_generic.test import TestAssert
 
 
 def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias):
@@ -46,7 +47,7 @@ def get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bia
   return input_upstride, filter_upstride, input_tf, filter_tf, bias
 
 
-class TestConv2D(unittest.TestCase):
+class TestConv2D(TestAssert):
   def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False):
     """ Runs a single convolution and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
@@ -71,9 +72,7 @@ class TestConv2D(unittest.TestCase):
 
     # compare the outputs
     output_tf = tf.transpose(output_tf, [0, 3, 1, 2])
-    err = tf.math.reduce_max(tf.math.abs(output_upstride - output_tf))
-    self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
-    print('[Conv2DFwd] Absolute difference:', err.numpy())
+    self.assert_and_print(output_upstride, output_tf, "Conv2DFwd", "output")
 
   def test_conv2d(self):
     self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
@@ -190,16 +189,11 @@ class TestConv2D(unittest.TestCase):
     grad_test_filters_upstride = gt.gradient(output_test, filters_upstride)
     grad_test_inputs_channels_first = gt.gradient(output_test, inputs_channels_first)
 
-    err = tf.math.reduce_max(tf.math.abs(output_test - output_ref))
-    self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
-    print('[Grouped Conv2DFwd] Absolute difference:', err.numpy())
-
-    err = tf.math.reduce_max(tf.math.abs(grad_test_inputs_channels_first - grad_ref_inputs_channels_first))
-    self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
-    print('[Grouped Conv2DBwd] Absolute difference:', err.numpy())
+    self.assert_and_print(output_test, output_ref, "Grouped Conv2DFwd", "output")
+    self.assert_and_print(grad_test_inputs_channels_first, grad_ref_inputs_channels_first, "Grouped Conv2DFwd", "dinputs")
 
 
-class TestConv2DGrad(unittest.TestCase):
+class TestConv2DGrad(TestAssert):
   def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias)
@@ -207,6 +201,8 @@ class TestConv2DGrad(unittest.TestCase):
     # UPSTRIDE
     with tf.GradientTape(persistent=True) as gt:
       gt.watch([filter_upstride, input_upstride])
+      if use_bias:
+        gt.watch(bias)
       output_upstride = upstride_ops.upstride_conv2d(input_upstride, filter_upstride, bias,
                                                      strides=strides,
                                                      padding=padding,
@@ -215,31 +211,37 @@ class TestConv2DGrad(unittest.TestCase):
                                                      use_bias=use_bias)
     grad_test_filter = gt.gradient(output_upstride, filter_upstride)
     grad_test_input = gt.gradient(output_upstride, input_upstride)
+    if use_bias:
+      grad_test_bias = gt.gradient(output_upstride, bias)
 
     # TENSORFLOW
     input_tf = tf.identity(input_tf)
     filter_tf = tf.identity(filter_tf)
     with tf.GradientTape(persistent=True) as gt:
       gt.watch([filter_tf, input_tf])
+      if use_bias:
+        gt.watch(bias)
       output_tf = tf.nn.conv2d(input_tf, filter_tf,
                                strides=strides,
                                padding=padding,
                                dilations=dilations)
+      if use_bias:
+        output_tf = tf.nn.bias_add(output_tf, bias)
 
     grad_reference_filter_tf = gt.gradient(output_tf, filter_tf)
     grad_reference_input_tf = gt.gradient(output_tf, input_tf)
+    if use_bias:
+      grad_reference_bias_tf = gt.gradient(output_tf, bias)
     #                                                                  O  I  H  W
     grad_reference_filter_tf = tf.transpose(grad_reference_filter_tf, [3, 2, 0, 1])
     grad_reference_input_tf = tf.transpose(grad_reference_input_tf, [0, 3, 1, 2])
 
     # COMPARISONS
-    err_filter = tf.math.reduce_max(tf.math.abs(grad_test_filter - grad_reference_filter_tf))
-    self.assertLess(err_filter, 1e-4, f"Absolute filter difference compared to the reference is too big: {err_filter}")
-    print('[Conv2DBwd] Absolute filter difference:', err_filter.numpy())
-
-    err_input = tf.math.reduce_max(tf.math.abs(grad_test_input - grad_reference_input_tf))
-    self.assertLess(err_input, 1e-4, f"Absolute input difference compared to the reference is too big: {err_input}")
-    print('[Conv2DBwd] Absolute input difference:', err_input.numpy())
+    self.assert_and_print(output_upstride, tf.transpose(output_tf, [0, 3, 1, 2]), "TestConv2DGrad", "output")
+    self.assert_and_print(grad_test_input, grad_reference_input_tf, "TestConv2DGrad", "dinput")
+    self.assert_and_print(grad_test_filter, grad_reference_filter_tf, "TestConv2DGrad", "dweights")
+    if use_bias:
+      self.assert_and_print(grad_test_bias, grad_reference_bias_tf, "TestConv2DGrad", "dbias")
 
   def test_conv2dgrad(self):
     self.run_conv2dgrad_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID')
@@ -260,7 +262,7 @@ class TestConv2DGrad(unittest.TestCase):
     self.run_conv2dgrad_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
 
 
-class TestDepthwiseConv2D(unittest.TestCase):
+class TestDepthwiseConv2D(TestAssert):
   def run_conv2d_test(self, img_size=9, filter_size=3, in_channels=64, use_bias=False, padding='VALID', strides=[1, 1, 1, 1], dilations=[1, 1]):
     """ Runs a single convolution and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias)
@@ -286,9 +288,7 @@ class TestDepthwiseConv2D(unittest.TestCase):
     output_tf = tf.transpose(output_tf, [0, 3, 1, 2])
 
     # COMPARISONS
-    err = tf.math.reduce_max(tf.math.abs(output_upstride - output_tf))
-    self.assertLess(err, 1e-4, f"Absolute difference with the reference is too big: {err}")
-    print('[DepthwiseConv2DFwd] Absolute difference:', err.numpy())
+    self.assert_and_print(output_upstride, output_tf, "DepthwiseConv2DFwd", "output")
 
   def test_conv2d(self):
     self.run_conv2d_test(img_size=5, filter_size=3, in_channels=4, padding='VALID')
@@ -307,7 +307,7 @@ class TestDepthwiseConv2D(unittest.TestCase):
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2], use_bias=True)
 
 
-class TestDepthwiseConv2DGrad(unittest.TestCase):
+class TestDepthwiseConv2DGrad(TestAssert):
   def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, use_bias=False, padding='SAME', strides=[1, 1, 1, 1], dilations=[1, 1]):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output
     """
@@ -340,13 +340,8 @@ class TestDepthwiseConv2DGrad(unittest.TestCase):
     grad_test_input = gt.gradient(output_upstride, input_upstride)
 
     # COMPARISONS
-    err_filter = tf.math.reduce_max(tf.math.abs(grad_test_filter - grad_reference_filter_tf))
-    self.assertLess(err_filter, 1e-4, f"Absolute filter difference compared to the reference is too big: {err_filter}")
-    print('[Conv2DBwd] Absolute filter difference:', err_filter.numpy())
-
-    err_input = tf.math.reduce_max(tf.math.abs(grad_test_input - grad_reference_input_tf))
-    self.assertLess(err_input, 1e-4, f"Absolute input difference compared to the reference is too big: {err_input}")
-    print('[Conv2DBwd] Absolute input difference:', err_input.numpy())
+    self.assert_and_print(grad_test_filter, grad_reference_filter_tf, "Conv2DBwd", "dfilter")
+    self.assert_and_print(grad_test_input, grad_reference_input_tf, "Conv2DBwd", "dinput")
 
   def test_conv2dgrad(self):
     self.run_conv2dgrad_test(img_size=5, filter_size=3, in_channels=4, padding='VALID')

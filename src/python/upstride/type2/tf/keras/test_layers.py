@@ -2,6 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D
+from upstride.type_generic.test import TestAssert
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
@@ -12,24 +13,48 @@ def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
   return [c1, c2, c3, c4]
 
 
-def get_gradient_and_output(inputs, function, kernels):
-  if type(inputs) == list: # TENSORFLOW
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch(kernels)
-      for e in inputs:
-        gt.watch(e)
-      outputs = function(inputs, kernels)
-      outputs = [tf.transpose(outputs[i], [0, 3, 1, 2]) for i in range(len(outputs))]
-    dinputs = [gt.gradient(outputs, e) for e in inputs]
-    dinputs = [tf.transpose(dinputs[i], [0, 3, 1, 2]) for i in range(len(dinputs))]
-  else: # UPSTRIDE
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch(kernels)
-      gt.watch(inputs)
-      outputs = function(inputs, kernels)
-    dinputs = gt.gradient(outputs, inputs)
+def get_gradient_and_output_tf(inputs, function, kernels, bias=None):
+  """ Computes the output and the gradients for a given TF-based quaternionic function.
+      Transposes the returned arguments so that it corresponds to channels_first
+  """
+  dbias = None
+  if bias is not None:
+    biases = []
+    for i in range(bias.shape[0]):
+      biases.append(bias[i, :])
+  with tf.GradientTape(persistent=True) as gt:
+    gt.watch(kernels)
+    for e in inputs:
+      gt.watch(e)
+    if bias is not None:
+      for b in biases:
+        gt.watch(b)
+    outputs = function(inputs, kernels)
+    if bias is not None:
+      outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
+      dbias = [gt.gradient(outputs, b) for b in biases]
+    outputs = [tf.transpose(outputs[i], [0, 3, 1, 2]) for i in range(len(outputs))]
+  dinputs = [gt.gradient(outputs, e) for e in inputs]
+  dinputs = [tf.transpose(dinputs[i], [0, 3, 1, 2]) for i in range(len(dinputs))]
   dkernels = gt.gradient(outputs, kernels)
-  return dinputs, dkernels, outputs
+  return dinputs, dkernels, dbias, outputs
+
+
+def get_gradient_and_output_upstride(inputs, op):
+  """ Computes the output and the gradients for a given upstride-based quaternionic op.
+  """
+  dbias = None
+  with tf.GradientTape(persistent=True) as gt:
+    gt.watch(op.kernel)
+    gt.watch(inputs)
+    if op.bias is not None:
+      gt.watch(op.bias)
+    outputs = op(inputs)
+  dinputs = gt.gradient(outputs, inputs)
+  if op.bias is not None:
+    dbias = gt.gradient(outputs, op.bias)
+  dkernels = gt.gradient(outputs, op.kernel)
+  return dinputs, dkernels, dbias, outputs
 
 
 class TestType2LayersTF2Upstride(unittest.TestCase):
@@ -125,9 +150,10 @@ class TestType2Conv2DBasic(unittest.TestCase):
       self.assertEqual(list(outputs.numpy().flatten()), expected_outputs[i])
 
 
-class TestType2Conv2D(unittest.TestCase):
-  """ Exhaustive quaternion convolution testing """
-
+class TestType2Conv2D(TestAssert):
+  """ Implements quaternion convolution unitary testing varying img_size, filter_size, 
+      in_channels, out_channels, padding, strides, dilations and use_bias.
+  """
   def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
     # initialize inputs
     tf.random.set_seed(45)
@@ -135,14 +161,17 @@ class TestType2Conv2D(unittest.TestCase):
     py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
-    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=False)
+    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
 
     upstride_conv(cpp_inputs) # runs a first time to initialize the kernel
-    upstride_conv.set_weights([tf.cast(tf.random.uniform(upstride_conv.kernel.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)])
+    weights = tf.cast(tf.random.uniform(upstride_conv.kernel.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+    if use_bias:
+      bias = tf.cast(tf.random.uniform(upstride_conv.bias.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
+      upstride_conv.set_weights([weights, bias])
+    else:
+      bias = None
+      upstride_conv.set_weights([weights])
     kernels = upstride_conv.kernel  # copies the quaternion kernel
-
-    def cpp_conv(inputs, kernels):
-      return upstride_conv(inputs)
 
     def py_conv(inputs, kernels):
       def tf_op(i, k):
@@ -152,20 +181,20 @@ class TestType2Conv2D(unittest.TestCase):
         return output
       return quaternion_mult_naive(tf_op, inputs, kernels)
 
-    dinput_test, dkernels_test, output_test = get_gradient_and_output(cpp_inputs, cpp_conv, kernels)
-    dinput_ref, dkernels_ref, output_ref = get_gradient_and_output(py_inputs, py_conv, kernels)
+    dinput_test, dkernels_test, dbias_test, output_test = get_gradient_and_output_upstride(cpp_inputs, upstride_conv)
+    dinput_ref, dkernels_ref, dbias_ref, output_ref = get_gradient_and_output_tf(py_inputs, py_conv, kernels, bias)
 
     output_ref_concat = tf.concat(output_ref, axis=0)
-    err_output = tf.math.reduce_max(tf.math.abs(output_test - output_ref_concat))
-    self.assertLess(err_output, 1e-4, f"Absolute output difference compared to the reference is too big: {err_output}")
-    
     dinput_ref_concat = tf.concat(dinput_ref, axis=0)
-    err_dinput = tf.math.reduce_max(tf.math.abs(dinput_test - dinput_ref_concat))
-    self.assertLess(err_dinput, 1e-4, f"Absolute d_input difference compared to the reference is too big: {err_dinput}")
-
     dkernels_ref_concat = tf.concat(dkernels_ref, axis=0)
-    err_dkernels = tf.math.reduce_max(tf.math.abs(dkernels_test - dkernels_ref_concat))
-    self.assertLess(err_dkernels, 1e-4, f"Absolute d_kernels difference compared to the reference is too big: {err_dkernels}")
+
+    # COMPARISONS
+    self.assert_and_print(output_test, output_ref_concat, "TestType2Conv2D", "output")
+    self.assert_and_print(dinput_test, dinput_ref_concat, "TestType2Conv2D", "dinput")
+    self.assert_and_print(dkernels_test, dkernels_ref_concat, "TestType2Conv2D", "dweights")
+    if use_bias:
+      dbias_ref_concat = tf.convert_to_tensor(dbias_ref)
+      self.assert_and_print(dbias_test, dbias_ref_concat, "TestType2Conv2D", "dbias")
 
   def test_upstride_inputs_backprop(self):
     try:
