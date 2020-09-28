@@ -9,9 +9,9 @@ from tensorflow.python.ops import array_ops, nn
 from .type_generic.custom_op import upstride_conv2d
 from .type_generic.tf.keras.layers import SCALAR, upstride_type_to_dimension
 from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
+from . import tf_version
 
 layers = tf.keras.layers
-
 
 class GenericConv2D(layers.Conv2D):
   def __init__(self,
@@ -40,13 +40,16 @@ class GenericConv2D(layers.Conv2D):
       self.type2_init = True
       self.saved_kernel_initializer = kernel_initializer
       kernel_initializer = 'glorot_uniform'
+    if tf_version < 2.3:
+      self.groups = groups
+    else:
+      kwargs["groups"] = groups
     super().__init__(filters,
                      kernel_size,
                      strides=strides,
                      padding=padding,
                      data_format=data_format,
                      dilation_rate=dilation_rate,
-                     groups=groups,
                      activation=activation,
                      use_bias=use_bias,
                      kernel_initializer=kernel_initializer,
@@ -57,6 +60,8 @@ class GenericConv2D(layers.Conv2D):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
+    if tf_version < 2.3:
+      self._is_causal = self.padding == 'causal'
     # for specific implementation, call this __init__ function and change this value
     self.upstride_datatype = None
     self.upstride_conv_op = upstride_conv2d
