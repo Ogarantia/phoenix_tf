@@ -12,14 +12,13 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/core/CMakeLists.txt)
 # list source code files
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cc)
 set(CPP_SOURCES_FOLDER "src/cc")
-set(SOURCES ${SOURCES} 
+set(SOURCES ${SOURCES}
     ${CPP_SOURCES_FOLDER}/kernels.cc
     ${CPP_SOURCES_FOLDER}/ops.cc
 )
 
 # add the library
 if (WITH_CUDNN)
-  find_package(CUDA)
   cuda_add_library(_upstride SHARED ${SOURCES})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBACKEND_CUDNN")
 else()
