@@ -1,10 +1,14 @@
 import tensorflow as tf
 import argparse
 import sys
+import time
 
 # tf.debugging.experimental.enable_dump_debug_info("/tmp/log", tensor_debug_mode="FULL_HEALTH", circular_buffer_size=-1)
 
-sys.path.append('../../src/python')
+# sys.path.append('../../src/python')
+import os
+
+sys.path.append(os.path.dirname(__file__) + "/../../src/python")
 
 
 def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
@@ -12,7 +16,7 @@ def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
   x = inputs
 
   if upstride:
-    import upstride.type2.tf.keras.layers as up
+    import upstride.scalar.tf.keras.layers as up
     framework = up
     print("Using upstride")
   else:
@@ -23,7 +27,7 @@ def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
   x = framework.Conv2D(4, 3, data_format='channels_first', use_bias=False, activation=tf.nn.relu, **kwargs)(x)
   x = framework.Conv2D(4, 3, data_format='channels_first', use_bias=False, activation=tf.nn.relu)(x)
   x = tf.keras.layers.Flatten()(x)
-  x = tf.keras.layers.Dense(nclasses)(x)
+  x = framework.Dense(nclasses)(x)
   logits = tf.keras.layers.Activation('softmax')(x)
   model = tf.keras.models.Model(inputs, logits)
   model.summary()
@@ -54,13 +58,15 @@ def main():
 
   # g-g-go
   tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir='/tmp/log', histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+  t = time.time()
   model.fit(x_train, y_train,
             epochs=60,
-            batch_size=128,
+            batch_size=8,
             validation_data=(x_test, y_test),
             callbacks=[tensorboard_cb,
                        tf.keras.callbacks.TerminateOnNaN()
                        ])
+  print(f"Training elapsed time: {time.time() - t}")
 
 
 if __name__ == "__main__":

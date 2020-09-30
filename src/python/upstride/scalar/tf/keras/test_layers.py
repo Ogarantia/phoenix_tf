@@ -3,6 +3,7 @@ import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
 from upstride.type_generic.test import TestCase
 from upstride import tf_version
+from .layers import DepthwiseConv2D
 
 def setUpModule():
   TestCase.setup()
@@ -324,6 +325,25 @@ class TestDepthwiseConv2D(TestCase):
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2])
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2], use_bias=True)
 
+  def run_depthwise_conv2d_python_constructor(self, img_size=9, filter_size=3, in_channels=64, use_bias=False, padding='VALID', strides=(1, 1), dilations=[1, 1]):
+    """ Test to verify that we are able to call depthwise convolution through the python interface.
+    """
+    cpp_inputs = tf.random.normal((2,           # N (batch size)
+                                   in_channels, # C
+                                   img_size,    # H
+                                   img_size),   # W
+                                   dtype=tf.float32)
+    upstride_depthwise_conv = DepthwiseConv2D(kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
+    upstride_depthwise_conv(cpp_inputs) # runs a first time to initialize the kernel
+
+  def test_depthwise_conv2d_python_constructor(self, img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=True):
+    try:
+      tf.keras.backend.set_image_data_format('channels_first')  # FIXME We should find a proper way to pass 'channels_first'
+      self.run_depthwise_conv2d_python_constructor(img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=True)
+      self.run_depthwise_conv2d_python_constructor(img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=False)
+    finally:
+      tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
+
 
 class TestDepthwiseConv2DGrad(TestCase):
   def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, use_bias=False, padding='SAME', strides=[1, 1, 1, 1], dilations=[1, 1]):
@@ -376,3 +396,70 @@ class TestDepthwiseConv2DGrad(TestCase):
     self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, padding='SAME', use_bias=True)
     self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, strides=[1, 2, 2, 1])
     self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, strides=[1, 2, 2, 1], use_bias=True)
+
+class TestDense(TestCase):
+  def get_inputs_and_filters_dense(self, batch_size, in_features, out_features, dtype=tf.float32):
+    inputs = tf.random.uniform([batch_size, in_features], minval=-1, maxval=1, dtype=dtype)
+    weights = tf.random.uniform([in_features, out_features], minval=-1, maxval=1, dtype=dtype)
+    bias = tf.random.uniform([out_features,], minval=-1, maxval=1, dtype=dtype)
+    return inputs, weights, bias
+
+  def run_test(self, batch_size, in_features, out_features, use_bias=False, dtype=tf.float32):
+    """ Runs a single dense and compares the result with TensorFlow output """
+    from . import layers
+    inputs, weights, bias = self.get_inputs_and_filters_dense(batch_size, in_features, out_features, dtype)
+    # run upstride dense
+    model_upstride = layers.Dense(out_features, use_bias=use_bias)
+    model_upstride(inputs)
+    if use_bias:
+      model_upstride.set_weights([weights, tf.expand_dims(bias, 0)])
+    else:
+      model_upstride.set_weights([weights])
+
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch([model_upstride.kernel, inputs])
+      if use_bias:
+        gt.watch(model_upstride.bias)
+      output_upstride = model_upstride(inputs)
+      if use_bias:
+        dinputs_upstride, dweights_upstride, dbias_upstride = gt.gradient(output_upstride, [inputs, model_upstride.kernel, model_upstride.bias])
+      else:
+        dinputs_upstride, dweights_upstride = gt.gradient(output_upstride, [inputs, model_upstride.kernel])
+
+    # run TF dense
+    model_tf = tf.keras.layers.Dense(out_features, use_bias=False)
+    output_tf = model_tf(inputs)
+    model_tf.set_weights([weights])
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch([model_tf.kernel, inputs])
+      output_tf = model_tf(inputs)
+      if use_bias:
+        gt.watch(bias)
+        output_tf = tf.nn.bias_add(output_tf, bias)
+        dbias_tf = gt.gradient(output_tf, bias)
+      dinputs_tf, dweights_tf = gt.gradient(output_tf, [inputs, model_tf.kernel])
+
+    # compare the outputs
+    self.assert_and_print(output_upstride, output_tf, "DenseFwd")
+    self.assert_and_print(dinputs_upstride, dinputs_tf, "DenseFwd", "dinput")
+    self.assert_and_print(dweights_upstride, dweights_tf, "DenseFwd", "dweights")
+    if use_bias:
+      self.assert_and_print(dbias_upstride, dbias_tf, "DenseFwd", "dbias")
+
+  def test_dense(self):
+    self.run_test(batch_size=1, in_features=1, out_features=1)
+    self.run_test(batch_size=2, in_features=3, out_features=4)
+    self.run_test(batch_size=64, in_features=64, out_features=10)
+    self.run_test(batch_size=64, in_features=64, out_features=10, use_bias=True)
+    self.run_test(batch_size=5, in_features=4, out_features=3, use_bias=True)
+    self.run_test(batch_size=128, in_features=100, out_features=10)
+    self.run_test(batch_size=128, in_features=100, out_features=10, use_bias=True)
+    # few float16 tests (only on GPU)
+    if tf.test.gpu_device_name():
+      # FIXME: these tests fail on a GPU with CUDA CC < 5.3. Need a reliable way to detect if we run such a GPU
+      try:
+        tf.keras.backend.set_floatx('float16')
+        self.run_test(batch_size=8, in_features=4, out_features=4, use_bias=True, dtype=tf.float16)
+        self.run_test(batch_size=1, in_features=2, out_features=16, use_bias=False, dtype=tf.float16)
+      finally:
+        tf.keras.backend.set_floatx('float32')

@@ -68,7 +68,9 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     bool useBias;
 
    public:
-    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context), upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>()), algebra(upstride::frontend_tf::getAlgebra(context)) {
+    explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context),
+                                                                     upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>()),
+                                                                     algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -129,6 +131,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     }
 };
 
+
 template <typename Device, typename T>
 class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideConv2DGradFunctor<Device, T> {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
@@ -149,7 +152,9 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
-    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context), upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>()), algebra(upstride::frontend_tf::getAlgebra(context)) {
+    explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
+                                                                         upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>()),
+                                                                         algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
         OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
@@ -202,6 +207,109 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 
             // execute the operation
             (*this)(device, input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
+        } catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
+        }
+    }
+};
+
+
+template <typename Device, typename T>
+class UpstrideDenseOpKernel : public OpKernel, private upstride::UpstrideDenseFunctor<Device, T> {
+    static const int
+        INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
+        INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
+        INPUT_BIAS_IDX = 2;    //!< index of the input tensor containing the bias
+
+    const upstride::Algebra algebra;  //!< algebra to use within the Op
+    bool useBias;
+
+   public:
+    explicit UpstrideDenseOpKernel(OpKernelConstruction* context) : OpKernel(context),
+                                                                    upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>()),
+                                                                    algebra(upstride::frontend_tf::getAlgebra(context)) {
+        // fetch parameters
+        OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
+
+        // configure the operation backend
+        upstride::UpstrideDenseFunctor<Device, T>::configure(algebra, upstride::DataFormat::NC);
+    }
+
+    void Compute(OpKernelContext* context) override {
+        using namespace upstride::frontend_tf;
+
+        try {
+            Device& device(fromTensorflowDevice<Device>(context));
+            // grab inputs
+            InputTensorTF<Device, T> input(context, device, INPUT_IMAGE_IDX);
+            InputTensorTF<Device, T> filter(context, device, INPUT_FILTER_IDX);
+
+            // compute output shape
+            TensorShape outShape = toTensorflowShape({input.getShape()[0], filter.getShape().getSize() == 3 ? filter.getShape()[2] : filter.getShape()[1]});
+
+            // allocate output tensor
+            OutputTensorTF<Device, T> output(context, device, outShape);
+
+            // execute the operation
+            if (useBias) {
+                InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
+                (*this)(input, filter, &bias, output);
+            }
+            else {
+                (*this)(input, filter, nullptr, output);
+            }
+        } catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
+        }
+    }
+};
+
+
+template <typename Device, typename T>
+class UpstrideDenseGradOpKernel : public OpKernel, private upstride::UpstrideDenseGradFunctor<Device, T> {
+    const upstride::Algebra algebra;  //!< algebra to use within the Op
+    bool requireInputGrad;
+
+   public:
+    static const int
+        INPUT_GRAD_IDX = 0,    //!< index of the input tensor containing the loss function gradient
+        INPUT_INPUT_IDX = 1,   //!< index of the input tensor containing the image
+        INPUT_KERNEL_IDX = 2;  //!< index of the input tensor containing the filter
+    static const int
+        OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
+        OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
+
+    explicit UpstrideDenseGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
+                                                                        upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>()),
+                                                                        algebra(upstride::frontend_tf::getAlgebra(context)) {
+        // fetch parameters
+        OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
+
+        // configure the operation backend
+        try {
+            upstride::UpstrideDenseGradFunctor<Device, T>::configure(algebra, upstride::DataFormat::NC, requireInputGrad);
+        } catch (std::exception& ex) {
+            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
+        }
+    }
+
+    void Compute(OpKernelContext* context) override {
+        using namespace upstride::frontend_tf;
+
+        try {
+            Device& device(fromTensorflowDevice<Device>(context));
+
+            // grab inputs
+            InputTensorTF<Device, T> grad(context, device, INPUT_GRAD_IDX);
+            InputTensorTF<Device, T> kernel(context, device, INPUT_KERNEL_IDX);
+            InputTensorTF<Device, T> input(context, device, INPUT_INPUT_IDX);
+
+            // allocate output tensor
+            OutputTensorTF<Device, T> kernelGrad(context, device, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
+            OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
+
+            // execute the operation
+            (*this)(input, kernel, grad, kernelGrad, inputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
@@ -263,7 +371,8 @@ void UpstrideWaitOpKernel<upstride::device::CPU>::Compute(OpKernelContext*) {}
 // Register the CPU kernels.
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2DGrad);
-
+REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideDense);
+REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideDenseGrad);
 REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_CPU), UpstrideWaitOpKernel<upstride::device::CPU>);
 
 // Register the GPU kernels.
@@ -271,10 +380,13 @@ REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_CPU), UpstrideWaitOpKernel<up
 #ifdef UPSTRIDE_ENABLE_FP16
 REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideConv2DGrad);
+REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideDense);
+REGISTER_UPSTRIDE_OP__FULL(Eigen::half, upstride::cudnn::half, GPU, CUDA, UpstrideDenseGrad);
 #endif
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2D);
 REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideConv2DGrad);
-
+REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideDense);
+REGISTER_UPSTRIDE_OP(float, GPU, CUDA, UpstrideDenseGrad);
 REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_GPU), UpstrideWaitOpKernel<upstride::device::CUDA>);
 #endif
 }  // namespace tensorflow

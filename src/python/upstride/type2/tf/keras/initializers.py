@@ -53,22 +53,19 @@ def _compute_fans(shape, data_format='channels_last'):
 
 
 class QInitializer(tf.keras.initializers.Initializer):
-  def __init__(self, shape, fan_in, fan_out, criterion, part_index, seed):
+  def __init__(self, shape, fan_in, fan_out, criterion, seed):
     """
     Args:
         shape: shape of the weight tensor
         fan_in: number of input features/feature maps
         fan_out: number of output features/feature maps
         criterion: initialization criterion for modulus of weight matrix ('glorot', 'he')
-        part_index: indicates the part of multi-vector by (r->0, i->1, j->2, k->3)
         seed: Random seed value
     """
     self.shape = shape
     self.fan_in = fan_in
     self.fan_out = fan_out
     self.criterion = criterion
-    assert part_index in [0, 1, 2, 3]
-    self.part_index = part_index
     self.seed = seed
     self.modulus, self.phase, self.v_i, self.v_j, self.v_k = self.initialize()
 
@@ -106,21 +103,23 @@ class QInitializer(tf.keras.initializers.Initializer):
     return modulus, phase, v_i, v_j, v_k
 
   def __call__(self, shape, dtype=None):
-    if self.part_index == 0:
-      weight = self.modulus * np.cos(self.phase)
-    elif self.part_index == 1:
-      weight = self.modulus * self.v_i * np.sin(self.phase)
-    elif self.part_index == 2:
-      weight = self.modulus * self.v_j * np.sin(self.phase)
-    else:
-      weight = self.modulus * self.v_k * np.sin(self.phase)
-
+    """ Returns the weight for the full multivector embedded in the shape provided.
+    """
+    weight_blade = []
+    weight_blade.append(self.modulus * np.cos(self.phase))
+    weight_blade.append(self.modulus * self.v_i * np.sin(self.phase))
+    weight_blade.append(self.modulus * self.v_j * np.sin(self.phase))
+    weight_blade.append(self.modulus * self.v_k * np.sin(self.phase))
+    weight = np.stack(weight_blade, axis=0)
+    if dtype is not None:
+      dtype = str(dtype).split("'")[1] # casting dtype from TF type to agnostic type
+      weight.astype(dtype)
     return weight
 
 
 class QInitializerConv(QInitializer):
   def __init__(self, kernel_size, input_dim, weight_dim, nb_filters=None,
-               criterion='he', part_index=0, seed=None):
+               criterion='he', seed=None):
     """
     Args:
         kernel_size: Convolution kernel shape
@@ -128,7 +127,6 @@ class QInitializerConv(QInitializer):
         weight_dim:
         nb_filters: number of output features/feature maps
         criterion: initialization criterion for modulus of weight matrix ('glorot', 'he')
-        part_index: indicates the part of multi-vector by (r->0, i->1, j->2, k->3)
         seed: Random seed value
 
         `weight_dim` is used as a parameter for sanity check
@@ -144,28 +142,27 @@ class QInitializerConv(QInitializer):
     """
     assert len(kernel_size) == weight_dim and weight_dim in {0, 1, 2, 3}
     if nb_filters is not None:
-      kernel_shape = tuple(kernel_size) + (int(input_dim), nb_filters)
+      kernel_shape = (nb_filters, int(input_dim)) + tuple(kernel_size)
     else:
       kernel_shape = (int(input_dim), kernel_size[-1])
 
     fan_in, fan_out = _compute_fans(
         tuple(kernel_size) + (input_dim, nb_filters)
     )
-    super(QInitializerConv, self).__init__(kernel_shape, fan_in, fan_out, criterion, part_index, seed)
+    super(QInitializerConv, self).__init__(kernel_shape, fan_in, fan_out, criterion, seed)
 
 
 class QInitializerDense(QInitializer):
-  def __init__(self, shape, criterion='he', part_index=0, seed=None):
+  def __init__(self, shape, criterion='he', seed=None):
     """
     Args:
         shape: Shape of the weight tensor
         criterion: initialization criterion for modulus of weight matrix ('glorot', 'he')
-        part_index: indicates the part of multi-vector by (r->0, i->1, j->2, k->3)
         seed: Random seed value
     """
     fan_in = shape[0]
     fan_out = shape[1]
-    super(QInitializerDense, self).__init__(shape, fan_in, fan_out, criterion, part_index, seed)
+    super(QInitializerDense, self).__init__(shape, fan_in, fan_out, criterion, seed)
 
 
 def is_type2_init(init_type):

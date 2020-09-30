@@ -102,9 +102,14 @@ Setting up the local compilation environment might be tedious.
 - To use the GPU, make sure your GPU is up (run `nvidia-smi`)
 - Install TensorFlow
   - Generally, if you follow [the installation instructions](https://www.tensorflow.org/install/gpu#linux_setup) precisely without improvising in the middle of the way, you get things running easily.
+- Install cuBLAS:
+```bash
+sudo apt install libcublas10
+```
+
 - Clone this repository and its submodules
+
 - Install GCC 8.4 contained in the repository as a compiler alternative:
-  
 ```bash
 sudo dpkg -i core/toolchain/gcc-8.4_8.4-1_amd64.deb
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/local/bin/gcc8.4  100

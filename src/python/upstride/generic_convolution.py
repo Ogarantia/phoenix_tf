@@ -7,7 +7,7 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops, nn
 from .type_generic.custom_op import upstride_conv2d
-from .type_generic.tf.keras.layers import SCALAR, upstride_type_to_dimension
+from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension
 from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
 from . import tf_version
 
@@ -40,6 +40,9 @@ class GenericConv2D(layers.Conv2D):
       self.type2_init = True
       self.saved_kernel_initializer = kernel_initializer
       kernel_initializer = 'glorot_uniform'
+    # self.groups are used for depthwise convolutions, which were introduced in TF 2.3. The following if statement
+    # is a patch that allows us to have the attributes that we need in order to compute depthwise convolutions
+    # regardless the tf_version
     if tf_version < 2.3:
       self.groups = groups
     else:
@@ -81,18 +84,12 @@ class GenericConv2D(layers.Conv2D):
     if self.type2_init:
       self.kernel_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel,
                                                  weight_dim=self.rank, nb_filters=self.filters,
-                                                 criterion=self.saved_kernel_initializer.split("_")[-1], seed=None,
-                                                 part_index=0)
+                                                 criterion=self.saved_kernel_initializer.split("_")[-1], seed=None)
 
     # setup kernel tensor shape
-    if self.upstride_datatype == SCALAR:
-      kernel_shape = (self.filters, input_channel // self.groups) + self.kernel_size
-    else:
-      kernel_shape = (upstride_type_to_dimension(self.upstride_datatype), self.filters, input_channel // self.groups) + self.kernel_size
-
     self.kernel = self.add_weight(
         name='kernel',
-        shape=kernel_shape,
+        shape=append_outermost_dim(self.upstride_datatype, (self.filters, input_channel // self.groups) + self.kernel_size),
         initializer=self.kernel_initializer,
         regularizer=self.kernel_regularizer,
         constraint=self.kernel_constraint,

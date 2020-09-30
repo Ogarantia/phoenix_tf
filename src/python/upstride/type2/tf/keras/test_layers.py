@@ -1,8 +1,14 @@
 import unittest
 import tensorflow as tf
 import numpy as np
-from .layers import TF2Upstride, Upstride2TF, Conv2D
+from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
 from upstride.type_generic.test import TestCase
+
+
+def setUpModule():
+  """ Called by unittest to prepare the module
+  """
+  TestCase.setup()
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
@@ -221,3 +227,98 @@ class TestType2Conv2D(TestCase):
       self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
     finally:
       tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
+
+
+# TODO quaternionic depthwise convolution unitary tests.
+class TestType2DepthwiseConv2d(TestCase):
+  def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
+    """ Test to verify that we are able to call depthwise convolution through the python interface.
+    """
+    tf.random.set_seed(45)
+    py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
+    py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
+    cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
+
+    upstride_depthwise_conv = DepthwiseConv2D(kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
+    upstride_depthwise_conv2 = DepthwiseConv2D(kernel_size=3) # TODO remove this line
+
+    upstride_depthwise_conv2(cpp_inputs)
+    upstride_depthwise_conv(cpp_inputs) # runs a first time to initialize the kernel
+
+  def test_type2_depthwise_conv2d(self):
+    try:
+      tf.keras.backend.set_image_data_format('channels_first')  # FIXME We should find a proper way to pass 'channels_first'
+      self.run_test()
+    finally:
+      tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
+
+
+class TestType2Dense(TestCase):
+  def get_gradient_and_output(self, inputs, function, kernels, bias):
+    if type(inputs) == list: # TENSORFLOW
+      with tf.GradientTape(persistent=True) as gt:
+        gt.watch(kernels)
+        if bias is not None:
+          gt.watch(bias)
+        for e in inputs:
+          gt.watch(e)
+        outputs = tf.concat(function(inputs, kernels), axis=0)
+      dinputs = tf.concat([gt.gradient(outputs, e) for e in inputs], axis=0)
+      dkernels = tf.concat(gt.gradient(outputs, kernels), axis=0)
+    else: # UPSTRIDE
+      with tf.GradientTape(persistent=True) as gt:
+        gt.watch([inputs, kernels])
+        if bias is not None:
+          gt.watch(bias)
+        outputs = function(inputs, kernels)
+      dinputs, dkernels = gt.gradient(outputs, [inputs, kernels])
+    if bias is not None:
+      dbias = gt.gradient(outputs, bias)
+    else:
+      dbias = None
+    return dinputs, dkernels, dbias, outputs
+
+  def run_test(self, batch_size, in_features, out_features, use_bias=False):
+    """ Runs a single dense and compares the result with TensorFlow output """
+    py_inputs = [tf.random.uniform((batch_size, in_features), dtype=tf.float32, minval=-1, maxval=1) for _ in range(4)]
+    cpp_inputs = tf.concat(py_inputs, axis=0)
+    upstride_dense = Dense(out_features, use_bias=use_bias)
+
+    upstride_dense(cpp_inputs) # runs a first time to initialize the kernel
+    kernels = upstride_dense.kernel  # copies the quaternion kernel
+    if use_bias:
+      bias = tf.random.uniform(upstride_dense.bias.shape, dtype=tf.float32, minval=-1, maxval=1)
+      upstride_dense.bias = bias
+    else:
+      bias = None
+
+    def cpp_dense(inputs, kernels):
+      return upstride_dense(inputs)
+
+    def py_dense(inputs, kernels):
+      def tf_op(i, k):
+        output = tf.linalg.matmul(i, k)
+        return output
+      output = quaternion_mult_naive(tf_op, inputs, kernels)
+      if bias is not None:
+        for i in range(4):
+          output[i] = tf.nn.bias_add(output[i], bias[i, :])
+      return output
+
+    dinput_test, dkernels_test, dbias_test, output_test = self.get_gradient_and_output(cpp_inputs, cpp_dense, kernels, bias)
+    dinput_ref, dkernels_ref, dbias_ref, output_ref = self.get_gradient_and_output(py_inputs, py_dense, kernels, bias)
+
+    self.assert_and_print(output_test, output_ref, "Type2Dense")
+    self.assert_and_print(dinput_test, dinput_ref, "Type2Dense", "dinput")
+    self.assert_and_print(dkernels_test, dkernels_ref, "Type2Dense", "dkernels")
+    if dbias_ref is not None:
+      self.assert_and_print(dbias_test, dbias_ref, "Type2Dense", "dbias")
+
+  def test_dense(self):
+    self.run_test(batch_size=1, in_features=1, out_features=1)
+    self.run_test(batch_size=2, in_features=3, out_features=4)
+    self.run_test(batch_size=64, in_features=64, out_features=10)
+    self.run_test(batch_size=64, in_features=64, out_features=10, use_bias=True)
+    self.run_test(batch_size=2, in_features=4, out_features=3, use_bias=True)
+    self.run_test(batch_size=128, in_features=100, out_features=10)
+    self.run_test(batch_size=128, in_features=100, out_features=10, use_bias=True)

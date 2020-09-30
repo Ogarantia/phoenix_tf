@@ -145,5 +145,59 @@ REGISTER_OP("UpstrideConv2DGrad")
         return tensorflow::Status::OK();
     });
 
+REGISTER_OP("UpstrideDense")
+    .Attr("T: {float16, float32}")
+    .Attr("uptype: int = 0")
+    .Input("input: T")
+    .Input("kernel: T")
+    .Input("bias: T")
+    .Output("output: T")
+    .Attr("use_bias: bool = false")
+    .Attr("require_input_grad: bool = true")
+    .SetShapeFn([](tensorflow::shape_inference::InferenceContext* ctx) {
+        static const int
+            INPUT_IDX = 0,
+            FILTER_IDX = 1;
+
+        try {
+            int uptype;
+            GET_FIELD(ctx, "uptype", uptype);
+            const upstride::Algebra algebra = upstride::getAlgebraFromType(uptype);
+            auto inputShape = ctx->input(INPUT_IDX);
+            auto filterShape = ctx->input(FILTER_IDX);
+
+            const int filterRank = algebra == upstride::Algebra::REAL ? 2 : 3;      // number of dimensions expected in the filter tensor
+
+            // check the filter rank first
+            if (!ctx->WithRank(ctx->input(FILTER_IDX), filterRank, &filterShape).ok())
+                return tensorflow::errors::InvalidArgument("Kernel rank mismatch: a tensor of " + std::to_string(filterRank) + " dimensions expected");
+
+            // set the output shape
+            ctx->set_output(0, ctx->MakeShape({ctx->Dim(inputShape, 0), ctx->Dim(filterShape, filterRank - 1) }));
+        }
+
+        catch (std::invalid_argument& ex) {
+            return tensorflow::errors::InvalidArgument(ex.what());
+        }
+
+        return tensorflow::Status::OK();
+    });
+
+
+REGISTER_OP("UpstrideDenseGrad")
+    .Attr("T: {float16, float32}")
+    .Attr("uptype: int = 0")
+    .Input("grad: T")
+    .Input("input: T")
+    .Input("kernel: T")
+    .Output("input_grad: T")
+    .Output("kernel_grad: T")
+    .Attr("require_input_grad: bool = true")
+    .SetShapeFn([](tensorflow::shape_inference::InferenceContext* c) {
+        c->set_output(0, c->input(1));
+        c->set_output(1, c->input(2));
+        return tensorflow::Status::OK();
+    });
+
 
 REGISTER_OP("Wait");

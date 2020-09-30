@@ -19,6 +19,12 @@ def upstride_type_to_dimension(type):
   return dimensions[type]
 
 
+def append_outermost_dim(type, shape):
+  """ Adds to a tensor shape the outermost dimension matching a specific algebra dimension, if needed
+  """
+  return shape if type == SCALAR else (upstride_type_to_dimension(type),) + shape
+
+
 generic_layers.blade_indexes = None
 generic_layers.geometrical_def = None
 

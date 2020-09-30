@@ -8,11 +8,11 @@ from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.utils import conv_utils, tf_utils
 from upstride.generic_convolution import GenericConv2D
+from upstride.generic_dense import GenericDense
 from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
 from ....generic_layers import *
 from ....type_generic.tf.keras.layers import upstride_type_to_dimension
-from .dense import Dense
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
@@ -118,7 +118,7 @@ class Conv2D(GenericConv2D):
                groups=1,
                activation=None,
                use_bias=True,
-               kernel_initializer='glorot_uniform',
+               kernel_initializer='up2_init_he',
                bias_initializer='zeros',
                kernel_regularizer=None,
                bias_regularizer=None,
@@ -157,7 +157,7 @@ class DepthwiseConv2D(Conv2D):
                data_format=None,
                activation=None,
                use_bias=True,
-               depthwise_initializer='glorot_uniform',
+               depthwise_initializer='glorot_uniform', # TODO implement 'up2_init_he' initializer
                bias_initializer='zeros',
                depthwise_regularizer=None,
                bias_regularizer=None,
@@ -178,7 +178,7 @@ class DepthwiseConv2D(Conv2D):
         bias_constraint=bias_constraint,
         **kwargs)
     self.depth_multiplier = depth_multiplier
-    self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer)
+    self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer) # TODO implement 'up2_init_he' initializer
     self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
     self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
     self.bias_initializer = tf.keras.initializers.get(bias_initializer)
@@ -188,22 +188,16 @@ class DepthwiseConv2D(Conv2D):
       raise ValueError('Inputs to `DepthwiseConv2D` should have rank 4. '
                        'Received input shape:', str(input_shape))
     input_shape = tensor_shape.TensorShape(input_shape)
+    self.groups = input_shape[1] if self.data_format == 'channels_first' else input_shape[3]
     channel_axis = self._get_channel_axis()
     if input_shape.dims[channel_axis].value is None:
       raise ValueError('The channel dimension of the inputs to '
                        '`DepthwiseConv2D` '
                        'should be defined. Found `None`.')
     input_dim = int(input_shape[channel_axis])
-    # 1 is the size of the group
-    # in pure tensorflow, code is like this :
-    # depthwise_kernel_shape = (self.kernel_size[0],
-    #                           self.kernel_size[1],
-    #                           input_dim,
-    #                           self.depth_multiplier)
-    # in upstride, the order need to be (o, g, h, w)
-    depthwise_kernel_shape = (upstride_type_to_dimension(self.upstride_datatype),
-                              input_dim,  # number of groups, so number of channels for depth wise conv
-                              self.depth_multiplier,  # number of output channels per group
+    depthwise_kernel_shape = (upstride_type_to_dimension(self.upstride_datatype), 
+                              self.groups,
+                              self.depth_multiplier,
                               self.kernel_size[0],
                               self.kernel_size[1])
 
@@ -224,7 +218,7 @@ class DepthwiseConv2D(Conv2D):
           trainable=True,
           dtype=self.dtype)
     else:
-      self.bias = []
+      self.bias = None
     # Set input spec.
     self.input_spec = InputSpec(ndim=4, axes={channel_axis: input_dim})
     self.built = True
@@ -233,18 +227,50 @@ class DepthwiseConv2D(Conv2D):
     outputs = self.upstride_conv_op(
         inputs,
         self.depthwise_kernel,
-        self.bias,
+        self.bias if self.use_bias else [],
         uptype=self.upstride_datatype,
         strides=self.strides,
         padding=self.padding.upper(),
         dilations=self.dilation_rate,
         data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
         name=self.name,
-        groups=inputs.shape[1],
+        groups=self.groups,
         use_bias=self.use_bias)
+
     if self.activation is not None:
       return self.activation(outputs)
+
     return outputs
+
+
+class Dense(GenericDense):
+  def __init__(self,
+               units,
+               activation=None,
+               use_bias=True,
+               kernel_initializer='up2_init_he',
+               bias_initializer='zeros',
+               kernel_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               kernel_constraint=None,
+               bias_constraint=None,
+               require_input_grad=True,
+               **kwargs):
+    super().__init__(units,
+                      activation,
+                      use_bias,
+                      kernel_initializer,
+                      bias_initializer,
+                      kernel_regularizer,
+                      bias_regularizer,
+                      activity_regularizer,
+                      kernel_constraint,
+                      bias_constraint,
+                      require_input_grad,
+                      **kwargs)
+
+    self.upstride_datatype = TYPE2
 
 
 class MaxNormPooling2D(Layer):
