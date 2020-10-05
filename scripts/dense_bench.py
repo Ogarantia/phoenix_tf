@@ -7,13 +7,23 @@ import tensorflow as tf
 import numpy
 import time
 import upstride.scalar.tf.keras.layers as uplayers
+import argparse
 
-operation = "dense"
+context = {
+  "op_name": "dense",
+  "logdir": "."
+}
 
 def main():
   gpus = tf.config.experimental.list_physical_devices('GPU')
   for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--logdir', "-ld", type=str, default=".", help='')
+  args = parser.parse_args()
+  
+  context["logdir"] = args.logdir
 
   input_features = [32, 256, 1024, 4096, 8192]
   output_features = [32, 256, 1024, 4096, 8192]
@@ -29,7 +39,7 @@ def main():
           benchmark(input_feature, output_feature, batch_size, use_bias)
 
   # 3 runs to benchmark
-  with open(f'{operation}/{operation}_output.csv', 'w') as f:
+  with open(f'{context["logdir"]}/{context["op_name"]}/{context["op_name"]}_output.csv', 'w') as f:
     f.write(f"iter,input_features,output_features,batch_size,use_bias,engine,execution time\n")
   for i in range(3):
     for input_feature in input_features:
@@ -57,19 +67,27 @@ def benchmark_upstride_through_python(weights, inputs, bias, use_bias):
   return output, times
 
 def benchmark_upstride(weights, inputs, bias, use_bias):
-  inputs = inputs.copy()
   num_rep = len(inputs)
+  inputs = inputs.copy()
   times = [0] * num_rep
   # first run to init upstride
   initializer_out = upstride_ops.upstride_dense(
-    inputs[12], weights, tf.expand_dims(bias, 0) if use_bias else [], uptype=0, require_input_grad=True, use_bias=use_bias
+    inputs[12], weights, 
+    tf.expand_dims(bias, 0) if use_bias else [], 
+    uptype=0, 
+    require_input_grad=True, 
+    use_bias=use_bias
   )
   upstride_ops.wait()    # wait until all the kernels in CUDA stream are actually executed
  
   for i in range(num_rep):
     start = time.time()
     output = upstride_ops.upstride_dense(
-      inputs[12], weights, tf.expand_dims(bias, 0) if use_bias else [], uptype=0, require_input_grad=True, use_bias=use_bias
+      inputs[12], weights, 
+      tf.expand_dims(bias, 0) if use_bias else [], 
+      uptype=0, 
+      require_input_grad=True, 
+      use_bias=use_bias
     )
     upstride_ops.wait()
     times[i] = 1000 * (time.time() - start)
@@ -140,13 +158,12 @@ def benchmark(input_features, output_features, batch_size, use_bias):
   output_up_python, times_up_python = benchmark_upstride_through_python(weights, inputs, bias, use_bias)
 
   err = tf.math.reduce_max(tf.math.abs(output_up - output_tf))
-  if err > 1e-2:
-    raise Exception(f"Difference between output_up and output_tf is {err} and it is considered to be too high. The computations might not be the same on both engines. Aborting.")
+  print('Error:', err.numpy())
 
-  if not os.path.exists(operation):
-    os.makedirs(operation)
+  if not os.path.exists(os.path.join(context["logdir"],context["op_name"])):
+    os.makedirs(os.path.join(context["logdir"],context["op_name"]))
 
-  with open(f'{operation}/{operation}_output.csv', 'a') as f:
+  with open(f'{context["logdir"]}/{context["op_name"]}/{context["op_name"]}_output.csv', 'a') as f:
     for i in range(num_rep):
       f.write(f"{i},{input_features},{output_features},{batch_size},{use_bias},upstride_cpp,{times_up[i]}\n")
       f.write(f"{i},{input_features},{output_features},{batch_size},{use_bias},tf_keras,{times_tf[i]}\n")

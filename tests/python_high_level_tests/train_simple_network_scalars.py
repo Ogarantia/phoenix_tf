@@ -3,14 +3,6 @@ import argparse
 import sys
 import time
 
-# tf.debugging.experimental.enable_dump_debug_info("/tmp/log", tensor_debug_mode="FULL_HEALTH", circular_buffer_size=-1)
-
-# sys.path.append('../../src/python')
-import os
-
-sys.path.append(os.path.dirname(__file__) + "/../../src/python")
-
-
 def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
   inputs = tf.keras.layers.Input(input_shape)
   x = inputs
@@ -35,13 +27,21 @@ def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
 
 
 def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--upstride', "-u", type=int, default=1, help='')
+  parser.add_argument('--logdir', "-ld", type=str, default="/tmp/log", help='')
+  parser.add_argument('--epochs', "-e", type=int, default=60, help='')
+  parser.add_argument('--batch_size', "-bs", type=int, default=1000, help='')
+  parser.add_argument('--step_per_epoch', "-se", type=int, default=30, help='')
+  args = parser.parse_args()
+
+  # Allow to solve some memory issues on GPUs
   gpus = tf.config.experimental.list_physical_devices('GPU')
   for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--upstride', "-u", type=int, default=1, help='')
-  args = parser.parse_args()
+  # Enable debug mode for tensorboard
+  tf.debugging.experimental.enable_dump_debug_info(args.logdir, tensor_debug_mode="FULL_HEALTH", circular_buffer_size=-1)
 
   # prepare CIFAR10
   (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
@@ -56,12 +56,13 @@ def main():
                 loss='sparse_categorical_crossentropy',
                 metrics=['accuracy'])
 
-  # g-g-go
-  tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir='/tmp/log', histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+  tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir=args.logdir, histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+
   t = time.time()
   model.fit(x_train, y_train,
-            epochs=60,
-            batch_size=8,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            steps_per_epoch=args.step_per_epoch,
             validation_data=(x_test, y_test),
             callbacks=[tensorboard_cb,
                        tf.keras.callbacks.TerminateOnNaN()

@@ -9,7 +9,7 @@ pipelines:
     '**':
       - step:
           name: Build for CPU and run Python tests
-          image: tensorflow/tensorflow:2.3.0-gpu
+          image: tensorflow/tensorflow:2.3.0
           caches:
             - build-folder    # cache build folder with the compiled binaries
           script:

@@ -2,8 +2,6 @@ import tensorflow as tf
 import argparse
 import sys
 
-sys.path.append('../../src/python')
-
 
 def Model(upstride=False, input_shape=(3, 32, 32), nclasses=10):
   inputs = tf.keras.layers.Input(input_shape)

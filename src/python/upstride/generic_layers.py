@@ -149,7 +149,6 @@ def get_layers(layer: tf.keras.layers.Layer, *argv, **kwargs) -> Tuple[List[tf.k
 
   return layers, add_bias, bias_parameters
 
-
 def compute_all_cross_product(layers, inputs):
   layers_outputs = []
   for i in range(multivector_length()):
@@ -254,7 +253,6 @@ class GenericLinear:
   this operation will perform linear operation for every GA. 
   Please note that this operation is not very efficient (need to split the tensor, do the computation then concat the results)
   """
-
   def __init__(self, layer, *argv, **kwargs):
     self.layers, self.add_bias, self.bias_parameters = get_layers(layer, *argv, **kwargs)
 
@@ -279,7 +277,6 @@ class GenericNonLinear:
   for most of them, we simply need to call the tensorflow function. As real part and imaginary parts are stacked
   on first component of the tensor (usually the batch size), it is transparent for tensorflow
   """
-
   def __init__(self, layer, *argv, **kwargs):
     self.layers = layer(*argv, **kwargs)
 

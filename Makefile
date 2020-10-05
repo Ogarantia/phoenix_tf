@@ -11,7 +11,7 @@ engine:
 	@make install
 
 build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
-	@cd build && make VERBOSE=0 -j`nproc`
+	@cd build && make VERBOSE=$(if $(VERBOSE),1,0) -j`nproc`
 
 # generates Makefile using CMake
 build/Makefile: FP16 ?= ON
