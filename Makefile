@@ -1,9 +1,29 @@
 ALLOW_VERBOSE ?= ON		# enables verbose messages in the engine when UPSTRIDE_VERBOSE env variable is set to 1 in runtime
 GPU ?= OFF				# enables GPU backend
 
+# specifying TensorFlow version (availability depends on the platform)
+ifeq ($(shell arch),aarch64)
+TF_VERSION=2.2.0
+else
+TF_VERSION=2.3.0
+endif
+
+# setting up docker images references
+ifeq ($(GPU),ON)
+DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-gpu-`arch`
+PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-gpu-`arch`
+DOCKERFILE_SUFFIX=gpu-`arch`
+else
+DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-$(TF_VERSION)-`arch`
+PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-`arch`
+DOCKERFILE_SUFFIX=`arch`
+endif
+
+# paths variables
 SOURCE_PATH=src
 CORE_SOURCE_PATH=core/src
-.PHONY : engine pre-build distclean clean dev_docker dev_docker_gpu build_nsight run_nsight install docker
+
+.PHONY : engine distclean clean install dev_docker docker build_nsight run_nsight
 
 # default target building the shared objects and placing them nicely to run tests
 engine:
@@ -19,24 +39,33 @@ build/Makefile: CMakeLists.txt
 	@mkdir -p build
 	@cd build && cmake -DWITH_CUDNN=$(GPU) -DALLOW_VERBOSE=$(ALLOW_VERBOSE) -DWITH_FP16=$(FP16) ..
 
-# ensures the options passed by variables are taken into account by cmake
-pre-build:
-	@touch CMakeLists.txt
-
 # removes the build folder
 distclean:
 	@rm -rf build
 
 # Clean the build folder
 clean:
-	@rm build/libs/_upstride.so ; rm build/tests
+	@touch CMakeLists.txt
+	@rm -f build/libs/_upstride.so build/tests
 
-# build docker with compilation environment
+# copy shared objects side-by-side with Python code
+install:
+	@cp build/libs/_upstride.so src/python/upstride/type_generic
+	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
+
+# build docker with the compilation environment
 dev_docker:
-	@docker build -t upstride/phoenix:1.0-dev -f dockerfiles/dev.dockerfile .
+	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
+				  -t $(DEVELOPMENT_DOCKER_REF) \
+				  -f dockerfiles/dev-$(DOCKERFILE_SUFFIX).dockerfile .
 
-dev_docker_gpu:
-	@docker build -t upstride/phoenix:1.0-dev-gpu -f dockerfiles/dev-gpu.dockerfile .
+# uses dev docker to build production docker image having the Engine as a Python module
+docker: dev_docker
+	@docker run --rm --gpus all -v `pwd`:/opt/upstride -w /opt/upstride $(DEVELOPMENT_DOCKER_REF) \
+				make clean engine GPU=$(GPU) ALLOW_VERBOSE=OFF
+	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
+				  -t $(PRODUCTION_DOCKER_REF) \
+				  -f dockerfiles/prod-$(DOCKERFILE_SUFFIX).dockerfile .
 
 # build docker containing nvidia-nsight
 build_nsight:
@@ -52,15 +81,3 @@ run_nsight:
     --privileged \
     upstride/nsight:1.0 \
     bash
-
-# copy shared objects side-by-side with Python code
-install:
-	@cp build/libs/_upstride.so src/python/upstride/type_generic
-	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
-
-# build production docker image having the Engine as a Python module
-docker: ALLOW_VERBOSE=OFF
-docker: GPU=ON
-docker: pre-build build/Makefile
-	@make -s build/*.so install
-	@docker build -t eu.gcr.io/fluid-door-230710/upstride:$(shell cat VERSION)-tf2.3.0-gpu -f dockerfiles/production.dockerfile .

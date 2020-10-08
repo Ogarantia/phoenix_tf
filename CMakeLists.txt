@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.18)
 cmake_policy(SET CMP0048 NEW)
 
 project(UpStride)
@@ -18,12 +18,7 @@ set(SOURCES ${SOURCES}
 )
 
 # add the library
-if (WITH_CUDNN)
-  cuda_add_library(_upstride SHARED ${SOURCES})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBACKEND_CUDNN")
-else()
-  add_library(_upstride SHARED ${SOURCES})
-endif()
+add_library(_upstride SHARED ${SOURCES})
 
 SET_TARGET_PROPERTIES(_upstride PROPERTIES
   PREFIX ""

@@ -20,12 +20,13 @@ The Engine is written in CUDA, C++11 and Python. CMake is used as the build syst
 ## Quick start
 
 ### Usage in a docker container
-If you are willing to use the Engine without modifying its code, you can pull a nicely prebuilt docker image from our cloud registry without compiling on your own (make sure you have access to it as explained [here](https://upstride.atlassian.net/wiki/spaces/UPSTRIDE/pages/425525257/How+to+deploy+UpStride+training)).
+If you are willing to use the Engine without modifying its code, you can pull a nicely prebuilt docker image from our cloud registry without cloning the code and compiling on your own:
 ```bash
   docker run -it --rm --gpus all \
-    -v $(pwd):/opt/src \
-    eu.gcr.io/fluid-door-230710/upstride:0.5-tf2.3.0-gpu
+    -v $(pwd):/opt/upstride \
+    upstride:0.6-px-tf2.3.0-gpu-x86_64
 ```
+In place of **0.6** you can put another version or remove *-gpu* to get a minimal version without CUDA support (running only on CPU).
 
 ### Compilation in docker
 ''_Docker is life. Thanks to docker we can create a compilation environment with a simple command._'' (c) Sebastien Iooss
@@ -34,21 +35,22 @@ If you are willing to use the Engine without modifying its code, you can pull a 
 The simplest option to compile the Engine from sources is using the CPU backend only. You only need git and docker installed.
 
 - Clone this repository and its submodules
-- Build the docker image (in the repository root):
+
+- If you have access to the docker the registry, you may pull the prebuilt development docker. (TODO: add instructions.) Otherwise build it (in the repository root):
 ```bash
 make dev_docker
 ```
 
-- Power up a docker container from the image just build, mounting the source code to `/opt/src` folder (for example):
+- Power up a docker container using the image just build, mounting the source code to `/opt/upstride` folder (for example):
 ```bash
 docker run -it --rm \
-    -v $(pwd):/opt/src \
-    upstride/phoenix:1.0-dev
+    -v $(pwd):/opt/upstride \
+    upstride:0.6-pxdev-tf2.3.0-x86_64
 ```
 
 - Compile the engine in the docker container:
 ```bash
-cd /opt/src
+cd /opt/upstride
 make
 ```
 
@@ -68,21 +70,22 @@ If you are lucky to have an NVidia GPU(s), you can get the engine with the GPU s
 The following instructions apply to compile the Engine running on recent GPUs having CUDA compute capability above or equal to 5.3. To compile for an older GPU you need to add `FP16=OFF` option to `make` commands below.
 
 - Clone this repository and its submodules
-- Build the docker image (in the repository root):
+
+- If you have access to the docker the registry, you may pull the prebuilt development docker. (TODO: add instructions.) Otherwise build it (in the repository root):
 ```bash
-make dev_docker_gpu
+make dev_docker GPU=ON
 ```
 
-- Power up a docker container from the image just build, mounting the source code to `/opt/src` folder (for example):
+- Power up a docker container using the image just build, mounting the source code to `/opt/upstride` folder (for example):
 ```bash
 docker run -it --rm --gpus all \
-    -v $(pwd):/opt/src \
-    upstride/phoenix:1.0-dev-gpu
+    -v $(pwd):/opt/upstride \
+    upstride:0.6-pxdev-tf2.3.0-gpu-x86_64
 ```
 
 - Compile the engine in the docker container:
 ```bash
-cd /opt/src
+cd /opt/upstride
 make GPU=ON
 ```
 
@@ -97,26 +100,34 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/src/python
 ```
 
 ### Compilation locally
-Setting up the local compilation environment might be tedious.
+Setting up the local compilation environment might be tedious. In what follows we describe steps to get things working on an x64 machine running an Ubuntu-based OS.
 
-- To use the GPU, make sure your GPU is up (run `nvidia-smi`)
+- To use the GPU, make sure your GPU is working (run `nvidia-smi`)
 - Install TensorFlow
   - Generally, if you follow [the installation instructions](https://www.tensorflow.org/install/gpu#linux_setup) precisely without improvising in the middle of the way, you get things running easily.
-- Install cuBLAS:
+
+- Install CMake 3.18 or a yet newer version. If such a version is not available off the shelf, add [Kitware apt repository](https://apt.kitware.com/) first and then do
 ```bash
-sudo apt install libcublas10
+sudo apt install cmake
 ```
 
 - Clone this repository and its submodules
 
-- Install GCC 8.4 contained in the repository as a compiler alternative:
+- Install gcc 8.4 package contained in the repository as a compiler alternative:
 ```bash
-sudo dpkg -i core/toolchain/gcc-8.4_8.4-1_amd64.deb
+sudo dpkg -i core/toolchain/gcc-8.4_8.4-1_x86_64.deb
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/local/bin/gcc8.4  100
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/bin/g++8.4  100
 ```
 
 - Run `make GPU=ON` (or `make GPU=OFF`) in its root to compile the Engine
+
+If you have CUDA 10.1, you may run into a cublas-related compilation issue. This is because CUDA 10.1 is shipped with libcublas 10.2 version which is located in a different folder, and even the newest CMake at the moment of writing is unable to find it. In this case you may need to point cublas location explicitly doing something like 
+```bash
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:/usr/local/cuda-10.2/include
+export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/cuda-10.2/lib64
+```
+
 - Run tests: `python3 test.py`
   If this fails due to a missing python module, you may need to point its location explicitly first:
 
@@ -126,17 +137,17 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/src/python
 
 
 ## Examples
-Train a small quaternion neural network on CIFAR10:
+Train a small quaternion neural network on CIFAR100:
 ```bash
-python3 tests/python_high_level_tests/train_simple_network_quaternions.py
+python3 tests/python_high_level_tests/train_model.py -d 2 -e 10
 ```
 
-Train a small real-valued network on CIFAR10, force training on CPU:
+Train a small real-valued network on CIFAR100, force training on CPU:
 ```bash
-CUDA_VISIBLE_DEVICES= python3 tests/python_high_level_tests/train_simple_network_scalars.py
+CUDA_VISIBLE_DEVICES= python3 tests/python_high_level_tests/train_model.py -d 0 -e 10
 ```
 
-Enable verbose mode when training the quaternion network:
+Enable verbose mode when training a quaternion network with separable convolutions:
 ```bash
-UPSTRIDE_VERBOSE=1 python3 tests/python_high_level_tests/train_simple_network_quaternions.py
+UPSTRIDE_VERBOSE=1 python3 tests/python_high_level_tests/train_model.py -m model_separable_conv -d 2 -e 10
 ```

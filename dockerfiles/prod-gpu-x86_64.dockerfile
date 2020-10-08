@@ -1,7 +1,8 @@
-FROM tensorflow/tensorflow:2.3.0-gpu
+ARG TF_VERSION
+FROM tensorflow/tensorflow:${TF_VERSION}-gpu
 
-# Upstride bash welcome screen 
-COPY dockerfiles/bash.bashrc /etc/bash.bashrc
+# add fancy UpStride bash welcome screen 
+COPY dockerfiles/bash.bashrc /root/.bash_aliases
 
 # install the python package in the docker
 COPY src/python/ /opt/upstride
