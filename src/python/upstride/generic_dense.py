@@ -11,6 +11,7 @@ from tensorflow.python.keras import regularizers
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import activations
 from tensorflow.python.keras import constraints
+from tensorflow.python.keras import backend as K
 
 
 class GenericDense(Layer):
@@ -106,7 +107,7 @@ class GenericDense(Layer):
     self.bias_constraint = constraints.get(bias_constraint)
     self.supports_masking = True
 
-    self.kernel_initializer_type = kernel_initializer  # initializers.get(kernel_initializer)
+    self.kernel_initializer_type = kernel_initializer
     self.upstride_datatype = None
     self.upstride_dense_op = upstride_dense
     self.require_input_grad = require_input_grad

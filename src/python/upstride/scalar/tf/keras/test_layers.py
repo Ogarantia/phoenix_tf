@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
 from upstride.type_generic.test import TestCase
-from upstride import tf_version
+from packaging import version
 from .layers import DepthwiseConv2D
 
 def setUpModule():
@@ -102,7 +102,7 @@ class TestConv2D(TestCase):
   def test_conv2d_grouped(self, img_size=5, filter_size=3, in_channels=4, out_channels=6, padding='VALID', strides=[1, 1], dilations=[1, 1], groups=2):
     """ Runs a single grouped convolution and compares the result with its expected output """
     # If GPU is available and tf_version is at least 2.3, then it computes the output_ref. Otherwise, use the hard-coded version previously computed from a seed
-    if not tf.test.gpu_device_name() or tf_version < 2.3:
+    if not tf.test.gpu_device_name() or version.parse(tf.__version__) < version.parse("2.3"):
       tf.random.set_seed(42)
       inputs_channels_first = tf.cast(tf.random.uniform((1, in_channels, img_size, img_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
       filters_upstride = tf.cast(tf.random.uniform((out_channels, in_channels // groups, filter_size, filter_size), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
@@ -190,6 +190,7 @@ class TestConv2D(TestCase):
     with tf.GradientTape(persistent=True) as gt:
       gt.watch(filters_upstride)
       gt.watch(inputs_channels_first)
+      # TODO call grouped convolution through the python interface
       output_test = upstride_ops.upstride_conv2d(
           inputs_channels_first, filters_upstride, [],
           strides=strides,

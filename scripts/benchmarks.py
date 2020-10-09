@@ -17,8 +17,8 @@
         Same as previously, but with inference tests; the name must start by "inf_"
         All results are sent to {context["resdir"]}/log_<file_name>
 # High high level tests using specific architectures
- generate_imagenet_infer_results:
-        Clone imagenet-baseline repository and run inference_benchmark.py,
+ generate_classification_api_infer_results:
+        Clone classification-api repository and run inference_benchmark.py,
         in order to get results in {context["resdir"]}
 # To run all the functions above
  generate_results:
@@ -116,13 +116,19 @@ context = {
     "list_op": [],      # list of operations can contains also #epochs and batch_size as follow list_op["file"]={"batch_size"=bs, "epochs"=nb_epochs}
     "config_file": "",  # Instead of writing arguments you can provide a configuration file where all fields are already filled
     "mem_use_limit": 20,# GPU memory limit percent from where you consider it as usable
-    "imagenet_architectures": [], # List all architecture to test with imagenet-baseline
+    "classification_arch_infer": [], # List all architecture to test with classification-api for inference
+    "classification_arch_train": [], # List all architecture to test with classification-api for training
     "orig_pythonpath": "",  # Save the PYTHONPATH env variable before we run this script
+    "multi-gpu": False,
     ## ENV CONTEXT
     "DEBUG": True,      # Allow to print all debug messages
-    "VERBOSE": 5        # Determine the verbose level; 0 completely silent, 1 only error messages, 2 add warning messages, 3 add info messages, 4 add debug messages
+    "VERBOSE": 5,       # Determine the verbose level; 0 completely silent, 1 only error messages, 2 add warning messages, 3 add info messages, 4 add debug messages
+    "batch_size_init":0 # If zero, the default initial batch size is kept. Otherwise, it is overwritten.
 }
 
+SUCCESS = 0
+ERROR = 1
+MEM_ERROR = 2
 
 ########################################
 ##         OS/GIT information         ##
@@ -175,7 +181,7 @@ def get_available_gpus():
         return []
 
 
-def modify_python_path(engine="", clean=False):
+def modify_python_path(engine="", path="", clean=False):
     """Append sys.path in order to choose the right engine.
     """
     if clean:
@@ -183,7 +189,12 @@ def modify_python_path(engine="", clean=False):
 
     # Set PYTHONPATH env variable
     myenv = os.environ.copy()
-    myenv['PYTHONPATH'] = context[engine]
+    if engine:
+        for eng in context["engines"]:
+            if eng["name"] == engine:
+                myenv['PYTHONPATH'] = eng["pythonpath"]
+    elif path:
+        myenv['PYTHONPATH'] = path
     return myenv
 
 
@@ -193,6 +204,41 @@ def set_gpu_use(list_of_gpu_indices):
     gpus = ",".join(list_of_gpu_indices)
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
 
+
+# For example git@bitbucket.org:upstride/upstride_python.git
+def clone_bitbucket_repos(repos_name):
+    project_parent_path = os.path.join(get_project_path(), '../')
+    repository_path = os.path.join(project_parent_path, repos_name)
+    
+    if not os.path.exists(repository_path):
+        subprocess.check_output(['git',
+                                 'clone',
+                                f'git@bitbucket.org:upstride/{repos_name}.git'],
+                                cwd=project_parent_path)
+        subprocess.check_output(['git',
+                                 'submodule',
+                                 'update',
+                                 '--init',
+                                 '--recursive'],
+                                cwd=repository_path)
+
+
+# for example git@github.com:UpStride/classification-api.git
+def clone_git_repos(repos_name):
+    project_parent_path = os.path.join(get_project_path(), '../')
+    repository_path = os.path.join(project_parent_path, repos_name)
+    
+    if not os.path.exists(repository_path):
+        subprocess.check_output(['git',
+                                 'clone',
+                                f'git@github.com:UpStride/{repos_name}.git'],
+                                cwd=project_parent_path)
+        subprocess.check_output(['git',
+                                 'submodule',
+                                 'update',
+                                 '--init',
+                                 '--recursive'],
+                                cwd=repository_path)
 
 # def docker_run(): # TODO in a future version
 
@@ -207,8 +253,8 @@ def collect_res_by_op(clean_all=True, clean=[]):
     """List operation to bench, run them and generate a log file that will be used by generate_graph_by_op later.
        Append all operations managed into the context list_op.
     Argument
-        clean_all : remove associated log file before running benchmarks
-        clean : List of log files to clean; file name is expected be the one of the run, not the log name
+        clean_all: remove associated log file before running benchmarks
+        clean: List of log files to clean; file name is expected be the one of the run, not the log name
     """
     script_path = os.path.join(get_project_path(), 'scripts')
     print_info(f"Running all scripts *_bench.py in {script_path}")
@@ -235,7 +281,7 @@ def collect_res_by_op(clean_all=True, clean=[]):
             myenv = modify_python_path(engine="px-upstride")
 
             with open(logfile_withpath, 'a') as logfile:
-                logfile.write("Execution Output : \n")
+                logfile.write("Execution Output: \n")
                 print_dbg(f'python3 {file_path} --logdir={context["resdir"]}')
                 logtxt = subprocess.Popen(['python3',
                                             file_path,
@@ -253,7 +299,7 @@ def collect_res_by_op(clean_all=True, clean=[]):
 
             print_info(f"Add {op_name} to the list of operations.")
             context["list_op"].append(op_name)
-            print_dbg(f'List of operation : {context["list_op"]}')
+            print_dbg(f'List of operations: {context["list_op"]}')
 
 
 def generate_graph_by_op():
@@ -312,22 +358,42 @@ def generate_gpu_profile(script_path_with_name, where=get_project_path()):
     add_readme_info(f'To visualize results please open {context["resdir"]}/prefetch.prof with your NVIDIA Visual Profiler')
 
 
-def generate_tensorboard_train_nn(epochs=30, batch_size=1024, list_of_files=[]):
+def create_engine_configs(context):
+    """ Create a list of engines assosiated with their possible value for dtype
+    """
+    engine_configs = []
+    for engines in context["engines"]:
+        for dtype in engines["dtype"]:
+            engine_configs.append({"name": engines["name"],
+                                    "dtype": dtype,
+                                    "pythonpath": engines["pythonpath"]})
+    return engine_configs
+
+
+def generate_tensorboard_train_nn(epochs=2, batch_size=1024, list_of_files=[]):
     """Run all train_*.py files in tests/python_high_level_tests/
        these files should be able to execute tensorboard and move files in "--logdir=context["resdir"]/log_{filename}"
     """
+    batch_size = batch_size if context["batch_size_init"] == 0 else context["batch_size_init"]
     script_path = os.path.join(get_project_path(), 'tests', 'python_high_level_tests')
     print_info(f"[Small NN] Generating results using all training scripts in {script_path}")
     # Error key words that appear every time a error is raised with python
     # Far to be perfect but at least it's something ¯\_(ツ)_/¯
     errorKeywords = "Traceback (most recent call last)"
     # Decrease batch_size only when it crashed due to lack of memory
-    errorMemoryLack = "out of memory"
+    errorMemoryLack = ["out of memory", "Cannot allocate output tensor", "CUDNN_STATUS_ALLOC_FAILED"]
     # find all files named train_*.py and fcall them to generate associated graphs
     # these files have been either requested in list_of_files or their name started with "train_"
     files = [f for f in os.listdir(script_path) if os.path.isfile(f'{script_path}/{f}')]
     if not files:
         print_warning(f"Beware, no file of type \"train_*.py\" found in {script_path}")
+
+    engine_configs_initial = create_engine_configs(context)
+    engine_configs = []
+    for engine_config in engine_configs_initial: # Adding 'train' argument, which is specific to train_model.py
+        for train in [1, 0.5, 0]:
+            engine_configs.append(dict(engine_config))
+            engine_configs[-1]["train"] = train
 
     for f in files:
         if list_of_files and f not in list_of_files:
@@ -340,42 +406,45 @@ def generate_tensorboard_train_nn(epochs=30, batch_size=1024, list_of_files=[]):
         epochs_r     = list_of_files[f]["epochs"]     if f in list_of_files and list_of_files[f]["epochs"]     else epochs
 
         print_info(f"Generation results from  {f}")
-        name = os.path.splitext(f)[0]
-        
+        fname = os.path.splitext(f)[0]
+
         # Looking for a batch_size that fit to the GPU.
         # By default it takes 1024 as maximum to test and divide by two each time it fails until it reaches a batch_size equals to 1.
         look_for_batchsize = True
-        success = False
         while look_for_batchsize:
             look_for_batchsize = True
-            for engine in context["engines"]:               
+            memory_error = False
+            for engine in engine_configs:
                 # Set names for logs
-                logdir_name  = f'log_{engine}_{name}_{context["device"]}'
-                logfile_name = f'log_{engine}_{name}_bs{batch_size_r}_{context["device"]}.log'
+                logdir_name  = f'log_{engine["name"]}-{engine["dtype"]}_{fname}_{context["device"]}'
+                logfile_name = f'log_{engine["name"]}-{engine["dtype"]}_{fname}_bs{batch_size_r}_{context["device"]}.log'
                 logdir = os.path.join(context["resdir"], logdir_name)
-                
+                    
                 # Clean previous noisy results
                 if os.path.exists(logdir):
                     subprocess.check_output(['rm', '-rf', f'{context["resdir"]}/{logdir_name}'])
                 os.makedirs(logdir)
 
                 # Set PYTHONPATH env variable
-                myenv = modify_python_path(engine=engine)
-
-                # Run cmd with the selected engine                    
-                print_dbg(f'python3 {f} --logdir={logdir} --epochs={epochs} --batch_size={batch_size_r} 2>&1 {logdir}/{logfile_name}')
+                myenv = modify_python_path(path=engine["pythonpath"])
+                # Run cmd with the selected engine
+                upstride_bool = 1 if engine["name"] == "px-upstride" else 0
+                python_command = f'PYTHONPATH={engine["pythonpath"]} python3 {script_path}/{f} --upstride={upstride_bool} --datatype={engine["dtype"]} --logdir={logdir} --epochs={epochs} --train={engine["train"]} --batch_size={batch_size_r}'
+                print_dbg(f'{python_command} 2>&1 {logdir}/{logfile_name}')
                 with open(os.path.join(logdir, logfile_name), 'a') as logfile:
-                    logfile.write(f"Run: python3 {f} --logdir={logdir} --epochs={epochs} --batch_size={batch_size_r}")
-                    logfile.write("Execution Output : \n")
-                    logtxt = subprocess.Popen(['python3', f,
-                                            f'--upstride={0 if engine == "tensorflow" else 1}',
-                                            f'--logdir={logdir}',
-                                            f'--epochs={epochs_r}',
-                                            f'--batch_size={batch_size_r}'],
-                                            cwd=script_path,
-                                            stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE,
-                                            env=myenv)
+                    logfile.write(f'Run: {python_command} \n')
+                    logfile.write("Execution Output: \n")
+                    logtxt = subprocess.Popen(['python3', f'{script_path}/{f}',
+                                              f'--upstride={upstride_bool}',
+                                              f'--datatype={engine["dtype"]}',
+                                              f'--logdir={logdir}',
+                                              f'--epochs={epochs_r}',
+                                              f'--train={engine["train"]}',
+                                              f'--batch_size={batch_size_r}'],
+                                              cwd=script_path,
+                                              stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE,
+                                              env=myenv)
                     while True:
                         line = logtxt.stdout.readline().decode('utf-8')
                         if not line: break
@@ -388,139 +457,314 @@ def generate_tensorboard_train_nn(epochs=30, batch_size=1024, list_of_files=[]):
                         logfile.write(err.decode('utf-8'))
                         print_warning(f"[Small NN] Batch_size of {batch_size_r} is not working for {f}.")
                         # If the error is "out of memory" let's try with a smaller batch_size
-                        if batch_size_r > 1 and errorMemoryLack in err.decode('utf-8'):
-                            print_warning("It seems related to a lack of memory. Let's try with a twice smaller batch_size.")
-                            batch_size_r = int(batch_size_r/2)
-                            break
+                        if batch_size_r > 1:
+                            for key in errorMemoryLack:
+                                if key in err.decode('utf-8'):
+                                    print_warning("It seems related to a lack of memory. We will try with a batch_size twice smaller.")
+                                    batch_size_r = int(batch_size_r/2)
+                                    memory_error = True
+                            if memory_error:
+                                break
                         else:
                             print_error("No \"batch_size\" works, so either your test is too greedy either the problem came from something else. Please check errors messages above.")
                             look_for_batchsize = False
                     else:
-                        success = True
-                        add_readme_info(f'[Small NN] Sucess on {f} with {engine}. \nTo visualize results please run: \ntensorboard --logdir {logdir}/{logdir_name}')
-            
-            look_for_batchsize = False if success else True
+                        add_readme_info(f'[Small NN] Sucess on {f} with {engine["name"]}. \nTo visualize results please run: \ntensorboard --logdir {logdir}/{logdir_name}')
+            look_for_batchsize = True if memory_error else False
 
 
-# TODO rename function according to the future new name of "imagenet-baselines" repo
-def generate_imagenet_infer_results():
-    """Download imagenet-baseline from bitbucket if it doesn't already exist in scripts/
+def generate_classification_api_infer_results():
+    """Download classification-api from bitbucket if it doesn't already exist in scripts/
        Then, if there is a config.yml file, use it to provide parameters. Otherwise, run fixed parameters
        This part of the script will be improved in the future: we will take more information in the context to provide here
     """
-    # Clone imagnet-baseline
-    script_path = os.path.join(get_project_path(), 'scripts')
-    repository_path = os.path.join(script_path, 'imagenet-baselines')
-    # Error key words that appear every time a error is raised with python
-    # Far to be perfect but at least it's something ¯\_(ツ)_/¯
-    errorKeywords = "Traceback (most recent call last)"
-    # List of possible errors related to a lack of memory
-    errorMemoryLack = ["out of memory", "Cannot allocate output tensor", "CUDNN_STATUS_ALLOC_FAILED"]
-    if not os.path.exists(repository_path):
-        subprocess.check_output(['git',
-                                 'clone',
-                                 'git@bitbucket.org:upstride/imagenet-baselines.git'],
-                                cwd=script_path)
-        subprocess.check_output(['git',
-                                 'submodule',
-                                 'update',
-                                 '--init',
-                                 '--recursive'],
-                                cwd=f'{script_path}/imagenet-baselines')
+    if context["device"] == "CPU":
+        print_error(f'Error: Sorry, all classification-api runs cannot be executed on {context["device"]}.')
+        return
 
-    # FIXME remove "and False" condition TODO not ready, we need to define a location for this config file
-    if os.path.exists(os.path.join(repository_path, 'config.yml')) and False:
+    project_parent_path = os.path.join(get_project_path(), '../')
+    repository_path = os.path.join(project_parent_path, 'classification-api')
+
+    # Clone imagnet-baseline
+    clone_git_repos(repos_name='classification-api')
+
+    # TODO: Test with config file
+    # The config file is currently searched here: ../classification-api/config.yml
+    if os.path.exists(os.path.join(repository_path, 'config.yml')):
         print("Using config.yml")
         print(subprocess.check_output(['python3',
                                        f'{repository_path}/inference_benchmark.py',
                                        f'--yaml_config={repository_path}/config.yml']))
     else:
-        models = context["imagenet_architectures"]
         batch_size = 128
         docker_img = 'local'
-        dtype = 2
-        factor = 4
-        for model in models:
-            batch_size_r = batch_size
-            if context["device"] == "CPU":
-                print_error(f'Error: Sorry, {model} cannot be executed on {context["device"]}. Move to the next model.')
-                continue
+
+        engine_configs = create_engine_configs(context)
+
+        # For all models defined by the user, run with all good parameters. 
+        # If a memory error is catched, then restart for all engines with a smaller batch_size
+        # If the error came from something else we continue to the next engine/model
+        # If success add all information for the user into the readme file at the root of resdir
+        for model in context["classification_arch_infer"]:
+            batch_size_r = batch_size if context["batch_size_init"] == 0 else context["batch_size_init"]
 
             # create path for results
-            results_dir = os.path.join(context["resdir"], 'imagenet', model)
+            results_dir = os.path.join(context["resdir"], 'classification-infer', model)
             if not os.path.exists(results_dir):
                 os.makedirs(results_dir)
 
-            # Call the inference_benchmark script
-            # Parameters that can either be defined in a config file or by ourselves
-            # The config file is currently searched here: scripts/imagenet-baseline/config.yml
             look_for_batchsize = True
-            success = False
             while look_for_batchsize:
-                fail = 0
-                for engine in context["engines"]:
-                    memory_error = False
-                    engine_name = engine
-                    if engine in ["py-upstride", "px-upstride"]:
-                        engine_name = engine_name+f'_{dtype}-f{factor}'
+                for engine in engine_configs:
+                    factor = 4 if engine["dtype"] == 2 else 1
+                    engine_name = engine["name"]
+                    engine_name_orig = engine["name"]
+                    dtype = engine["dtype"]
+                    if "-upstride" in engine_name:
+                        engine_name = engine_name + f'_{dtype}-f{factor}'
 
                     # Clean PYTHONPATH and add path to the px-upstride
-                    myenv = modify_python_path(engine=engine, clean=True)
+                    myenv = modify_python_path(path=engine["pythonpath"], clean=True)
+
+                    # Create the list of args to pass
+                    args_list = ['python3',
+                                f'{repository_path}/inference_benchmark.py',
+                                '--batch_size', batch_size_r,
+                                '--cpu', 'True' if context["device"] == "CPU" else 'False',
+                                '--docker_images', docker_img,
+                                '--models', model,
+                                '--engines', engine_name,
+                                '--output', os.path.join(results_dir, f'{engine_name_orig}_res.txt')
+                                ]
 
                     # Run the Phoenix engine
-                    print_dbg(f"python3 {repository_path}/inference_benchmark.py --batch_size {batch_size_r} --cpu 'False' --docker_images {docker_img} --models {model} --engines {engine_name} --output {os.path.join(results_dir, f'{engine}_res.txt')}")
-                    with open(os.path.join(results_dir, f'log_inf_benchmark_{engine}_bs{batch_size_r}.log'), 'a') as logfile:
-                        logfile.write("Execution Output : \n")
-                        logtxt = subprocess.Popen(['python3',
-                                                f'{repository_path}/inference_benchmark.py',
-                                                '--batch_size', str(batch_size_r),
-                                                '--cpu', 'True' if context["device"] == "CPU" else 'False',
-                                                '--docker_images', docker_img,
-                                                '--models', model,
-                                                '--engines', engine_name,
-                                                '--output', os.path.join(results_dir, f'{engine}_res.txt')],
-                                                cwd=repository_path,
-                                                stdout=subprocess.PIPE,
-                                                stderr=subprocess.PIPE,
-                                                env=myenv)
-                        
-                        while True:
-                            line = logtxt.stdout.readline().decode('utf-8')
-                            if not line: break
-                            sys.stdout.write(line)  # print in standard output
-                            logfile.write(line)
-                        # Catch if an error was raised
-                        _, err = logtxt.communicate()
-                        if errorKeywords in err.decode('utf-8'):
-                            print(err.decode('utf-8'))
-                            logfile.write(err.decode('utf-8'))
-                            print_error(f'[imagnet-baseline] Error when running {engine}')
-                            print_warning(f"[imagnet-baseline] Batch_size of {batch_size_r} is not working for {model}.")
-                            fail += 1
-                            
-                            if batch_size_r > 1:
-                                for key in errorMemoryLack:
-                                    if key in err.decode('utf-8'):
-                                        print_warning("It seems related to a lack of memory. We will try with a batch_size twice smaller.")
-                                        batch_size_r = int(batch_size_r/2)
-                                        memory_error = True
-                                if memory_error:
-                                    break
-                            else:
-                                print_error("Error: No batch_size works, so either your model is too greedy either the problem came from something else.")
-                                add_readme_info("If all run, runs out of memory, try to add the following lines in you code:\ngpus = tf.config.experimental.list_physical_devices('GPU')\nfor gpu in gpus:\n\ttf.config.experimental.set_memory_growth(gpu, True)\n")
-                                look_for_batchsize = False
-                                if batch_size_r == 1:
-                                    success=True # not really true but to finish to look for a lower batch size
-                                    break  # I don't know if we should stop everything or continue with the other egines
-                        else:
-                            success = True
-                            add_readme_info(f'[Imagenet-Baseline] Sucess on {model} with {engine}. Results are in {os.path.join(results_dir, f"log_inf_benchmark_px_bs{batch_size_r}.log")} ')
-                
-                look_for_batchsize = False if success or fail == len(context["engines"]) else True
+                    print_dbg(f"python3 {repository_path}/inference_benchmark.py " 
+                              f"--batch_size {batch_size_r} "
+                               "--cpu 'False' "
+                              f"--docker_images {docker_img} "
+                              f"--models {model} "
+                              f"--engines {engine_name} "
+                              f"--output {os.path.join(results_dir, f'{engine_name_orig}_res.txt')} "
+                              f"2&>1 {os.path.join(results_dir, f'log_inf_benchmark_{engine_name_orig}_{dtype}_bs{batch_size_r}.log')}")
+                     # Run CMD
+                    status = execute_popen_in_log(logfile_w_path=os.path.join(results_dir, f'log_inf_benchmark_{engine_name_orig}_{dtype}_bs{batch_size_r}.log'), 
+                                                  cmd=args_list, cwd=repository_path, env=myenv)
+                    
+                    # Check status to know what to do next
+                    if status == SUCCESS:
+                        add_readme_info(f'[classification-api] Sucess on {model} with {engine_name}.'
+                                        f'Results are in {os.path.join(results_dir, f"log_inf_benchmark_{engine_name_orig}_{dtype}_bs{batch_size_r}.log")} ')
+                        look_for_batchsize = False
+                    elif status == ERROR: # 
+                        print_error(f'Error when running {engine["name"]} with {dtype}')
+                        print_warning(f'Batch_size of {batch_size_r} is not working for {model}.')
+                        look_for_batchsize = False
+                    elif status == MEM_ERROR:
+                        print_error(f'Error when running {engine["name"]} with {dtype}')
+                        print_warning(f'Batch_size of {batch_size_r} is not working for {model}.')
+                        print_warning('It seems related to a lack of memory. We will try with a batch_size twice smaller.')
+                        batch_size_r = int(batch_size_r/2)
+                        look_for_batchsize = True
+                        break
+                    else:
+                        print_error(f'Error when running {engine["name"]} with {dtype}')
+                        print_error(f'Return status not known.')
 
 
-def generate_all_results(collect_op=True, generate_op=True, generate_nn=True, imagenet=True):
+def generate_classification_api_train_results():
+    """Download classification-api from bitbucket if it doesn't already exist in project_path()/../
+       Then, if there is a config.yml file, use it to provide parameters. Otherwise, run fixed parameters
+       This part of the script will be improved in the future: we will take more information in the context to provide here
+    """
+    if context["device"] == "CPU":
+        print_error(f'Error: Sorry, Classification-api is not made to be executed on {context["device"]}. \nStop training.')
+        return
+
+    project_parent_path = os.path.join(get_project_path(), '../')
+    repository_path = os.path.join(project_parent_path, 'classification-api')
+
+    # Clone classification-api
+    clone_git_repos(repos_name='classification-api')
+
+    # TODO: Test with config file
+    # The config file is currently searched here: ../classification-api/config.yml
+    if os.path.exists(os.path.join(repository_path, 'config.yml')):
+        print("Using config.yml")
+        print(subprocess.check_output(['python3',
+                                       f'{repository_path}/train.py',
+                                       f'--yaml_config={repository_path}/config.yml']))
+    else:
+        train_configurations = []
+        if "MobileNetV2Cifar10NCHW" in context["classification_arch_train"]:
+            train_configurations.append ( # MobileNetV2Cifar10NCHW - cifar10
+            {
+                "model_name": "MobileNetV2Cifar10NCHW",
+                "data_name": "cifar10",
+                "num_class": 10,
+                "input_size_H": 32, "input_size_W": 32, "input_size_C": 3,
+                "data_train_list": ['RandomHorizontalFlip','Translate','Cutout','Normalize'],
+                "data_val_list": ['Normalize'],
+                "data_val_split_id": "test",
+                "data_trans_width_shift_range": 0.25,
+                "data_trans_height_shift_range": 0.25,
+                "data_cutout_length": 4,
+                "early_stopping": 40,
+                "optimizer_lr": 0.1,
+                "optimizer_lr_decay_strat_patience": 20,
+                "optimizer_lr_decay_strat_strategy": "lr_reduce_on_plateau",
+                "optimizer_lr_decay_strat_decay_rate": 0.3
+            })
+        if "MobileNetV2NCHW" in context["classification_arch_train"]:
+            # It does not make much sense to use Mobilenet with cifar100. Commenting for the moment
+            # TODO: Decide its destiny
+            # train_configurations.append ( # MobileNetV2NCHW - cifar100
+            # {
+            #     "model_name": "MobileNetV2NCHW",
+            #     "data_name": "cifar100",
+            #     "num_class": 100,
+            #     "input_size_H": 32, "input_size_W": 32, "input_size_C": 3,
+            #     "data_train_list": ['RandomHorizontalFlip','Translate','Cutout','Normalize'],
+            #     "data_val_list": ['Normalize'],
+            #     "data_val_split_id": "test",
+            #     "data_trans_width_shift_range": 0.25,
+            #     "data_trans_height_shift_range": 0.25,
+            #     "data_cutout_length": 4,
+            #     "early_stopping": 40,
+            #     "optimizer_lr": 0.1,
+            #     "optimizer_lr_decay_strat_patience": 20,
+            #     "optimizer_lr_decay_strat_strategy": "lr_reduce_on_plateau",
+            #     "optimizer_lr_decay_strat_decay_rate": 0.3
+            # })
+            train_configurations.append ({ # MobileNetV2NCHW - imagenette/full-size-v2
+                "model_name": "MobileNetV2NCHW",
+                "data_name": "imagenette/full-size-v2",
+                "num_class": 10,
+                "batch_size": 4,
+                "early_stopping": 40
+            })
+            # Prepare stuff for imagenet but not tested and validated yet
+            # train_configurations.append (
+            # {
+            #     "model_name": "MobileNetV2NCHW",
+            #     "data_name": "imagenet",
+            #     "num_class": 1000,
+            #     "input_size_H": 224, "input_size_W": 224, "input_size_C": 3,
+            #     "data_train_list": ['ResizeThenRandomCrop','RandomHorizontalFlip','Translate','Cutout','Normalize'],
+            #     "data_val_list": ['ResizeThenRandomCrop','Normalize'],
+            #     "data_val_split_id": "validation",
+            #     "data_trans_width_shift_range": 0.25,
+            #     "data_trans_height_shift_range": 0.25,
+            #     "data_cutout_length": 4,
+            #     "early_stopping": 40,
+            #     "optimizer_lr": 0.1,
+            #     "optimizer_lr_decay_strat_patience": 20,
+            #     "optimizer_lr_decay_strat_strategy": "lr_reduce_on_plateau",
+            #     "optimizer_lr_decay_strat_decay_rate": 0.3
+            # })
+        
+        # Create a list of engines assosiated with their possible value for dtype
+        engine_configs = create_engine_configs(context)
+        batch_size = 128
+        nb_epochs=1000
+
+        for train_config in train_configurations:
+            batch_size_r = batch_size if context["batch_size_init"] == 0 else context["batch_size_init"]
+            # create path for results
+            results_dir = os.path.join(context["resdir"], 'classification-train', train_config["model_name"])
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+            # Call the train.py script
+            # Parameters that can either be defined in a config file or by ourselves
+            # The config file is currently searched here: scripts/classification-api/config.yml
+            look_for_batchsize = True
+            while look_for_batchsize:
+                for engine in engine_configs:
+                    factor = 4 if engine["dtype"] == 2 else 1
+                    dtype = engine["dtype"]
+                    if "-upstride" in engine["name"]:
+                        type_name = "real" if dtype == 0 else "type2"
+                        engine_name = "upstride_"+type_name
+                    else:
+                        engine_name = engine["name"]
+
+                    # Clean PYTHONPATH and add path to the px-upstride
+                    myenv = modify_python_path(path=engine["pythonpath"], clean=True)
+
+                    # Create the list of args to pass
+                    args_list = ['python3', 
+                                f'{repository_path}/train.py',
+                                 '--model_name', train_config["model_name"],
+                                 '--framework', engine_name,
+                                 '--factor', factor,
+                                 '--num_epochs', nb_epochs,
+                                 '--checkpoint_dir', os.path.join(results_dir,"checkpoint/"),
+                                 '--log_dir', results_dir,
+                                 '--dataloader.batch_size', batch_size_r,
+                                 '--dataloader.name', train_config["data_name"],
+                                 '--early_stopping', train_config["early_stopping"]
+                                ]
+                    # All of these parameters don't obviously appear when calling classification-api/train.py
+                    # So we have to check for each parameter
+                    if train_config["data_name"] != "imagenette/full-size-v2":
+                        if train_config["input_size_H"]:
+                            args_list.extend(['--input_size', train_config["input_size_H"], train_config["input_size_W"], train_config["input_size_C"]])
+                        if train_config["data_train_list"]:
+                            args_list.extend(['--dataloader.train_list', *train_config["data_train_list"]])
+                        if train_config["data_val_list"]:
+                            args_list.extend(['--dataloader.val_list', *train_config["data_val_list"]])
+                        if train_config["data_val_split_id"]:
+                            args_list.extend(['--dataloader.val_split_id', train_config["data_val_split_id"]])
+                        if train_config["data_trans_width_shift_range"]:
+                            args_list.extend(['--dataloader.Translate.width_shift_range', train_config["data_trans_width_shift_range"]])
+                        if train_config["data_trans_height_shift_range"]:
+                            args_list.extend(['--dataloader.Translate.height_shift_range', train_config["data_trans_height_shift_range"]])
+                        if train_config["data_cutout_length"]:
+                            args_list.extend(['--dataloader.Cutout.length', train_config["data_cutout_length"]])
+                        if train_config["optimizer_lr"]:
+                            args_list.extend(['--optimizer.lr', train_config["optimizer_lr"]])
+                        if train_config["optimizer_lr_decay_strat_patience"]:
+                            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.patience', train_config["optimizer_lr_decay_strat_patience"]])
+                        if train_config["optimizer_lr_decay_strat_strategy"]:
+                            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.strategy', train_config["optimizer_lr_decay_strat_strategy"]])
+                        if train_config["optimizer_lr_decay_strat_decay_rate"]:
+                            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.decay_rate', train_config["optimizer_lr_decay_strat_decay_rate"]])
+                    if train_config["num_class"]:
+                        args_list.extend(['--num_classes', train_config["num_class"]])
+
+                    # Both cannot co-exist
+                    if context["multi-gpu"]:
+                        args_list.append('--configuration.mirrored')
+                    else:
+                        args_list.extend(['--configuration.profiler', 'True'])
+                    
+                    # Print cmd line used
+                    print_dbg(f"PYTHONPATH={myenv['PYTHONPATH']} {' '.join(list(map(str,args_list)))}")
+                    # Run CMD
+                    status = execute_popen_in_log(logfile_w_path=os.path.join(results_dir, f'log_train_benchmark_{engine["name"]}_{dtype}_bs{batch_size_r}.log'), cmd=args_list, cwd=repository_path, env=myenv)
+                    
+                    # Check status to know what to do next
+                    if status == SUCCESS:
+                        add_readme_info(f'[classification-api] Sucess on {train_config["model_name"]} with {engine["name"]}({type_name}). Results are in {results_dir}/log_train_benchmark_{engine["name"]}_{dtype}_bs{batch_size_r}.log')
+                        look_for_batchsize = False
+                    elif status == ERROR: # 
+                        print_error(f'Error when running {engine["name"]} with {type_name}')
+                        print_warning(f'Batch_size of {batch_size_r} is not working for {train_config["model_name"]}.')
+                        look_for_batchsize = False
+
+                    elif status == MEM_ERROR:
+                        print_error(f'Error when running {engine["name"]} with {type_name}')
+                        print_warning(f'Batch_size of {batch_size_r} is not working for {train_config["model_name"]}.')
+                        print_warning('It seems related to a lack of memory. We will try with a batch_size twice smaller.')
+                        batch_size_r = batch_size_r // 2
+                        look_for_batchsize = True if batch_size_r > 1 else False
+                        if look_for_batchsize:
+                            break
+                    else:
+                        print_error(f'Error when running {engine["name"]} with {type_name}')
+                        print_error(f'Return status not known.')
+
+
+def generate_all_results(collect_op=True, generate_op=True, generate_nn=True, classification_infer=True, classification_train=True):
     print_info("****")
     print_info("Start generating results...")
     if collect_op:
@@ -535,10 +779,14 @@ def generate_all_results(collect_op=True, generate_op=True, generate_nn=True, im
         print_info("**")
         print_info("Generating graph by training script...")
         generate_tensorboard_train_nn()
-    if imagenet:
+    if classification_infer:
         print_info("**")
-        print_info("Generating results from imagenet-baseline...")
-        generate_imagenet_infer_results()
+        print_info("Generating results from classification-api (inference)...")
+        generate_classification_api_infer_results()
+    if classification_train:
+        print_info("**")
+        print_info("Generating results from classification-api (training)...")
+        generate_classification_api_train_results()
     print_info("... End generating results")
     print_info("****")
 
@@ -596,27 +844,91 @@ def execute_command(cmd):
     return subprocess.check_output(cmd.split(' '), cwd=get_project_path()).strip().decode('ascii')
 
 
+def execute_popen_in_log(logfile_w_path, cmd, cwd, env=""):
+    """ Executes a command at the root of the project and returns its stdout.
+    Raises CalledProcessError exception if its return code is not zero.
+    """
+    # Error key words that appear every time a error is raised with python
+    # Far to be perfect but at least it's something ¯\_(ツ)_/¯
+    errorKeywords = "Traceback (most recent call last)"
+    # List of possible errors related to a lack of memory
+    errorMemoryLack = ["out of memory", "Cannot allocate output tensor", "CUDNN_STATUS_ALLOC_FAILED"]
+
+    with open(logfile_w_path, 'a') as logfile:
+        logfile.write("Execution Output: \n")
+        logtxt = subprocess.Popen(map(str,cmd),
+                                cwd=cwd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=env)
+        while True:
+            line = logtxt.stdout.readline().decode('utf-8')
+            if not line: break
+            if line:
+                if line[-1] != '\r':
+                    logfile.write(line)     # print in log file
+                sys.stdout.write(line)  # print in standard output
+
+        # Catch if an error was raised
+        _, err = logtxt.communicate()
+        if errorKeywords in err.decode('utf-8'):
+            print(err.decode('utf-8'))
+            logfile.write(err.decode('utf-8'))
+            for key in errorMemoryLack:
+                if key in err.decode('utf-8'):
+                    return MEM_ERROR
+            else:
+                print_error("Error: No batch_size works, so either your model"
+                            " is too greedy either the problem came from something else.")
+                add_readme_info("If all run, runs out of memory, try to add the following lines in you code:\n"
+                                "gpus = tf.config.experimental.list_physical_devices('GPU')\n"
+                                "for gpu in gpus:\n\ttf.config.experimental.set_memory_growth(gpu, True)\n")
+                return ERROR
+                    
+    return SUCCESS
+
+
 def print_error(str):
-    if context["VERBOSE"] != 0:
+    if context["VERBOSE"] >= 0:
         print("\033[0;31m [Error]", str, "\033[1;37;39m")  # print in red
 
 
 def print_warning(str):
-    if context["VERBOSE"] > 1:
+    if context["VERBOSE"] >= 1:
         print("\033[0;33m [Warning]", str, "\033[1;37;39m")  # print in yellow
 
 
 def print_info(str):
-    if context["VERBOSE"] > 2:
+    if context["VERBOSE"] >= 2:
         print("\033[0;37;40m [INFO]", str, "\033[0;37;39m")  # print in cyan
 
 
 def print_dbg(str):
-    if context["DEBUG"] or context["VERBOSE"] > 3:
+    if context["DEBUG"] or context["VERBOSE"] >= 3:
         print("\033[0;36m [DBG]", str, "\033[0;37;39m")  # print in grey
 
 
-def fill_context(config_file="", project_name="phoenix_tf", commit="master", resdir="", pxpath="", pypath="", lib_path="", verbose=1):
+def fill_context(config_file="", args=None,
+                 project_name="phoenix_tf", commit="master", 
+                 resdir="", 
+                 pxpath="", pypath="", 
+                 lib_path="",
+                 multigpu=False, 
+                 verbose=4):
+    """Fill context in order to have all information needed to run all other functions
+
+    Args:
+        config_file (str, optional): configuration file with all information of the context. Defaults to "".
+        args ([type], optional): Not used yet, but planed to be used to get all args from main and manage them here. Defaults to None.
+        project_name (str, optional): The root folder name of the project. Defaults to "phoenix_tf".
+        commit (str, optional): hash/branch name of the engine. Defaults to "master".
+        resdir (str, optional): results directory where all results are put. Defaults to "".
+        pxpath (str, optional): PYTHONPATH to the px-engine. Defaults to "".
+        pypath (str, optional): PYTHONPATH to the py-engine. Defaults to "".
+        lib_path (str, optional): Where to find .so. Defaults to "".
+        multigpu (bool, optional): Enable multi-gpus, only available for training. Defaults to False.
+        verbose (int, optional): Verbose level of this script, from 0 to 4. Defaults to 4.
+    """
     # Save original PYTHONPATH env variable
     if 'PYTHONPATH' in os.environ:
         context["orig_pythonpath"] = os.environ['PYTHONPATH']
@@ -626,19 +938,24 @@ def fill_context(config_file="", project_name="phoenix_tf", commit="master", res
         context["device"] = 'GPU' if get_available_gpus() else 'CPU'
         context["commit"] = commit
         # Fill engines en their path
+        # Phoenix engine can managed scalar and type 2
         if pxpath and os.path.exists(pxpath):
             context["px-upstride"] = pxpath
-            context["engines"].append("px-upstride")
-            # information where to find libs
-            #context["lib_path"]["px-upstride"] = lib_path if lib_path != "" else os.path.join(get_project_path(), "build/libs")
+            context["engines"].append({"name": "px-upstride",
+                                       "dtype":[2,0],
+                                       "pythonpath":pxpath})
+        # Python-upstride only manage type 2 
         if pypath and os.path.exists(pypath):
             context["py-upstride"] = pypath
-            context["engines"].append("py-upstride")
-            # information where to find libs
-            #context["lib_path"]["py-upstride"] = lib_path if lib_path != "" else os.path.join(get_project_path(), "../upstride_python/upstride/type2/tf/keras/")
-        context["engines"].append("tensorflow")
-        context["tensorflow"] = ""
+            context["engines"].append({"name": "py-upstride",
+                                       "dtype":[2],
+                                       "pythonpath":pypath})
+        # Tensorflow scalar
+        context["engines"].append({"name": "tensorflow",
+                                   "dtype":[0],
+                                   "pythonpath":""})
         context["lib_path"] = ""
+        context["multi-gpu"] = multigpu
         # Where to put results
         context["resdir"] = "/tmp/res-phoenix-" + get_git_revisions_hash()[:6] if resdir == "" else resdir
         # Should we clear all previous results by default ?
@@ -646,46 +963,58 @@ def fill_context(config_file="", project_name="phoenix_tf", commit="master", res
             os.system(f'rm -rf {context["resdir"]}')
         os.makedirs(context["resdir"])
         context["VERBOSE"] = verbose
-        if not context["imagenet_architectures"]:
-            context["imagenet_architectures"] = ['AlexNetNCHW','MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
+        if not context["classification_arch_infer"]:
+            context["classification_arch_infer"] = ['AlexNetNCHW','MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
     else:
+        # TODO THIS PART HAS NOT BEEN TESTED, SO VERIFY IT WORKS AND THAT WE HAVE ALL INFORMATION NEEDED
         # User assume that all fileds are correct
         if not os.path.exists(config_file):
             print("Error: ", config_file, " doesn't exist.")
             exit(0)
-        # TODO THIS PART HAS NOT BEEN TESTED, SO VERIFY IT WORKS AND THAT WE HAVE ALL INFORMATION NEEDED
+        # Start to fill the context from config file
+        context["config_file"] = config_file
+        add_readme_info(f'[Init] fill information from {config_file}')
+        
         config = configparser.ConfigParser()
         config.read(config_file)
-        if 'project_name' in config:
-            context["project_name"] = config['project_name']
-        if 'device' in config:
-            context["device"] = config['device']
-            if context["device"] == "GPU":
-                if 'mem_use_limit' in config:
-                    context["mem_use_limit"] = config['mem_use_limit']
-        if 'commit' in config:
-            context["commit"] = config['commit']
-        if 'px-upstride' in config:
-            context["px-upstride"] = config['engine']
-        if 'py-upstride' in config:
-            context["py-upstride"] = config['engine']
-        if 'resdir' in config:
-            context["resdir"] = config['resdir']
-            if os.path.exists(context["resdir"]):
-                os.system(f'rm -rf {context["resdir"]}')
-            os.makedirs(context["resdir"])
-        if 'lib_path' in config:
-            context["lib_path"] = config['lib_path']
-        if 'list_op' in config:
-            context["list_op"] = config['list_op']
+        ### Project name
+        context["project_name"] = config['project_name'] if 'project_name' in config else project_name
+        ### GPU/CPU
+        context["device"] = config['device'] if 'device' in config else 'GPU' if get_available_gpus() else 'CPU'
+        if context["device"] == "GPU" and 'mem_use_limit' in config: context["mem_use_limit"] = config['mem_use_limit']
+        ### Git 
+        if 'commit'      in config: context["commit"] = config['commit']
+        ## Engines
+        if 'px-upstride' in config: context["engines"].append({"name": "px-upstride", "dtype":[2,0], "pythonpath":config['px-upstride']})
+        if 'py-upstride' in config: context["engines"].append({"name": "py-upstride", "dtype":[2],   "pythonpath":config['py-upstride']})
+        context["engines"].append({"name": "tensorflow", "dtype":[0], "pythonpath":""})
+        # Results folder
+        context["resdir"] = config['resdir'] if 'resdir' in config else "/tmp/res-phoenix-" + get_git_revisions_hash()[:6]
+        if os.path.exists(context["resdir"]): os.system(f'rm -rf {context["resdir"]}')
+        os.makedirs(context["resdir"])
+        # SO files
+        context["lib_path"] = config['lib_path'] if 'lib_path' in config else ''
+        # Operations
+        context["list_op"] = config['list_op'] if 'list_op'  in config else []
+        context["classification_arch_infer"] = config["classification_arch_infer"] if "classification_arch_infer" in config else ['AlexNetNCHW','MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
+        context["classification_arch_train"] = config["classification_arch_train"] if "classification_arch_train" in config else ['MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
+        # System
+        if 'multigpu'    in config: context["multi-gpu"] = config['multigpu']
+        # CONTEXT
+        if 'VERBOSE'     in config: context["VERBOSE"] = config['VERBOSE']
+        if 'DEBUG'       in config: context["DEBUG"] = config['DEBUG']
+    context["batch_size_init"] = args.batch_size_init
 
 
 def setup_env():
     """ Setup your pip environment to be able to run bench (it's mainly to avoid to crash because it only missing these install)
     """
-    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'seaborn'])
-    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'keras-tuner'])
-    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'upstride_argparse'])
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'seaborn']) # required by collect_res_by_op and generate_graph_by_op
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'keras-tuner']) # required by generate_tensorboard_train_nn
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'upstride_argparse']) # required by generate_classification_api_train_results
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'opencv-python']) # required by generate_classification_api_train_results
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'tensorflow-datasets']) # required by generate_classification_api_train_results
+    subprocess.check_output(['python3', '-m', 'pip', '--disable-pip-version-check', 'install', 'tensorflow-addons']) # required by generate_classification_api_train_results
 
 
 def print_generic_info():
@@ -698,8 +1027,8 @@ def print_generic_info():
     print("From ", get_project_path())
     print("Result directory: ", context["resdir"])
     print("Engines path: ")
-    print("Phoenix : ",context["px-upstride"])
-    print("Python  : ",context["py-upstride"])
+    print("Phoenix: ",context["px-upstride"])
+    print("Python : ",context["py-upstride"])
     print("-----------------------")
     print("Phoenix lib information: ")
     print("Branch: ", get_git_branch_name())
@@ -711,6 +1040,10 @@ def print_generic_info():
     found_gpu = context["device"].find("GPU") != -1
     if found_gpu:
         print("Device: [GPUs] - ", get_available_gpus())
+        if context["multi-gpu"]:
+            print("Multi-GPU: ON")
+        else:
+            print("Multi-GPU: OFF")
     else:
         print("Device: CPU")
     print("Proc: ", platform.processor())
@@ -754,11 +1087,18 @@ def write_generic_info():
 
 
 def add_readme_info(message):
+    """Add a message into resdir/README.txt
+
+    Args:
+        message (str): Message to write into the README
+    """
     with open(os.path.join(context["resdir"], 'README.txt'), 'w') as info:
         info.write(message)
 
 
 def pack_results():
+    """Compress results directory in order to get/send/copy/read it later
+    """
     print("pack results in ", context["resdir"])
     if not os.path.exists(context['resdir']):
         print_error("No results to pack.")
@@ -774,17 +1114,23 @@ def pack_results():
 
 
 def create_config_file_template():
+    """Create a configuration file template
+    """
     config = configparser.ConfigParser()
     config["project_name"] = "phoenix_tf"
     config["device"] = "GPU"
     config["commit"] = "master"
-    config["resdir"] = "res"
+    config["resdir"] = "/tmp/res"
     config["lib_path"] = ""
     config["px-upstride"] = ""
     config["py-upstride"] = ""
     config["list_op"] = []
-    config["config_file"] = ""
+    context["classification_arch_infer"] = ['AlexNetNCHW','MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
+    context["classification_arch_train"] = ['MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
     config["mem_use_limit"] = 10
+    config['multigpu'] = False
+    config['VERBOSE'] = 0
+    config['DEBUG'] = False
 
     with open('config_teplate.cfg', 'w') as configfile:
         config.write(configfile)
@@ -798,15 +1144,19 @@ def create_config_file_template():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--commit',         "-c",    type=str,  default="master",   help='git commit hash used to execute bench')
-    parser.add_argument('--config-file',    "-cf",   type=str,  default="",         help='overight all other command except project name.')
+    parser.add_argument('--config-file',    "-cf",   type=str,  default="",         help='overwrite all other command except project name.')
     parser.add_argument('--gen_all_res',    "-gar",  action='store_true',           help='Run all bench')
-    parser.add_argument('--interactive',    "-i",    action='store_true',           help='overight all other command except project name.')
+    parser.add_argument('--interactive',    "-i",    action='store_true',           help='overwrite all other command except project name.')
     parser.add_argument('--lib_path',       "-lp",   type=str, default="",          help='Used to indicate where is _upstride.so')
+    parser.add_argument('--multigpu',       "-mg",   action='store_true',           help='Enable multi-GPU or not')
     parser.add_argument('--project_name',   "-pn",   type=str, default="phoenix_tf",help='Default: phoenix_tf')
+    parser.add_argument('--result_dir',     "-rd",   type=str, default="",          help='Default: \'\'')
     parser.add_argument('--px_engine_path', "-pxep", type=str, default="",          help='Used to indicate where is located the Phoenix engine')
     parser.add_argument('--py_engine_path', "-pyep", type=str, default="",          help='Used to indicate where is located the python engine')
     parser.add_argument('--update',         "-u",    action='store_true',           help='Update and compile engine')
     parser.add_argument('--verbose',        "-v",    type=int, default=5,           help='Update and compile engine')
+    parser.add_argument('--batch_size_init',"-b",    type=int, default=0,           help='First batch size that the script is going to try. '
+                                                                                         'If no value is passed, its default value on each use case is applied.')
     args = parser.parse_args()
 
     # Either run following steps
@@ -819,7 +1169,8 @@ def main():
         collect_op = False
         generate_op = False
         generate_nn = False
-        imagenet = False
+        classification_infer = False
+        classification_train = False
     else:
         txt = input("Print sys info? y/N ")
         print_info = True if (txt == "y") else False
@@ -838,7 +1189,8 @@ def main():
             collect_op = False
             generate_op = False
             generate_nn = False
-            imagenet = False
+            classification_infer = False
+            classification_train = False
         else:
             general_all_res = False
             txt = input("Collect data by operation (scripts/*_bench.py)? y/N ")
@@ -847,25 +1199,36 @@ def main():
             generate_op = True if (txt == "y") else False
             txt = input("Generate graph from small NN sample? y/N ")
             generate_nn = True if (txt == "y") else False
-            txt = input("Run imagenet-baseline ? y/N ")
-            imagenet = True if (txt == "y") else False
-            if imagenet:
-                txt = input("[imagenet-baseline] on AlexNet ? y/N ")
+            txt = input("Run classification-api (inference) ? y/N ")
+            classification_infer = True if (txt == "y") else False
+            if classification_infer:
+                txt = input("[classification-api][inf] on AlexNet ? y/N ")
                 if txt == 'y':
-                    context["imagenet_architectures"].append('AlexNetNCHW')
-                txt = input("[imagenet-baseline] on MobileNetV2Cifar10 ? y/N ")
+                    context["classification_arch_infer"].append('AlexNetNCHW')
+                txt = input("[classification-api][inf] on MobileNetV2Cifar10 ? y/N ")
                 if txt == 'y':
-                    context["imagenet_architectures"].append(
-                        'MobileNetV2Cifar10NCHW')
-                txt = input("[imagenet-baseline] on MobileNetV2 ? y/N ")
+                    context["classification_arch_infer"].append('MobileNetV2Cifar10NCHW')
+                txt = input("[classification-api][inf] on MobileNetV2 ? y/N ")
                 if txt == 'y':
-                    context["imagenet_architectures"].append('MobileNetV2NCHW')
+                    context["classification_arch_infer"].append('MobileNetV2NCHW')
+            txt = input("Run classification-api (training) ? y/N ")
+            classification_train = True if (txt == "y") else False
+            if classification_train:
+                txt = input("[classification-api][train] on MobileNetV2Cifar10 ? y/N ")
+                if txt == 'y':
+                    context["classification_arch_train"].append('MobileNetV2Cifar10NCHW')
+                txt = input("[classification-api][train] on MobileNetV2 ? y/N ")
+                if txt == 'y':
+                    context["classification_arch_train"].append('MobileNetV2NCHW')
 
-    fill_context(project_name=args.project_name,
+    fill_context(args=args,
+                 project_name=args.project_name,
                  commit=args.commit,
                  pypath=args.py_engine_path if args.py_engine_path else os.path.join(get_project_path(), "../upstride_python"),  # TODO: this should not be default path but it's easier for me
                  pxpath=args.px_engine_path if args.px_engine_path else os.path.join(get_project_path(), "src/python"),
+                 resdir=args.result_dir,
                  lib_path=args.lib_path,
+                 multigpu=True if args.multigpu else False,
                  verbose=args.verbose)
 
     set_gpu_use(get_available_gpus())
@@ -883,7 +1246,8 @@ def main():
     generate_all_results(collect_op=collect_op or general_all_res,
                          generate_op=generate_op or general_all_res,
                          generate_nn=generate_nn or general_all_res,
-                         imagenet=imagenet       or general_all_res)
+                         classification_infer=classification_infer or general_all_res,
+                         classification_train=classification_train or general_all_res)
     # if results directory exists and contains results
     if os.path.exists(context["resdir"]) and len(os.listdir(context["resdir"])) > 1:
         pack_results()

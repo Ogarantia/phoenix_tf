@@ -13,6 +13,7 @@ from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
 from ....generic_layers import *
 from ....type_generic.tf.keras.layers import upstride_type_to_dimension
+from .initializers import is_type2_init, QInitializerConv
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
@@ -157,7 +158,7 @@ class DepthwiseConv2D(Conv2D):
                data_format=None,
                activation=None,
                use_bias=True,
-               depthwise_initializer='glorot_uniform', # TODO implement 'up2_init_he' initializer
+               depthwise_initializer='up2_init_he',
                bias_initializer='zeros',
                depthwise_regularizer=None,
                bias_regularizer=None,
@@ -178,7 +179,7 @@ class DepthwiseConv2D(Conv2D):
         bias_constraint=bias_constraint,
         **kwargs)
     self.depth_multiplier = depth_multiplier
-    self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer) # TODO implement 'up2_init_he' initializer
+    self.depthwise_initializer = depthwise_initializer
     self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
     self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
     self.bias_initializer = tf.keras.initializers.get(bias_initializer)
@@ -200,6 +201,15 @@ class DepthwiseConv2D(Conv2D):
                               self.depth_multiplier,
                               self.kernel_size[0],
                               self.kernel_size[1])
+
+    # change initializer if needed
+    input_shape = tensor_shape.TensorShape(input_shape)
+    input_channel = self._get_input_channel(input_shape)
+    if is_type2_init(self.depthwise_initializer):
+      self.depthwise_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel // self.groups,
+                                                    weight_dim=self.rank, nb_filters=self.groups,
+                                                    criterion=self.depthwise_initializer.split("_")[-1], seed=None)
+    self.depthwise_initializer = tf.keras.initializers.get(self.depthwise_initializer)
 
     self.depthwise_kernel = self.add_weight(
         shape=depthwise_kernel_shape,

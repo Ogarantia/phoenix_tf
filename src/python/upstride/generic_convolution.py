@@ -2,6 +2,7 @@
 """
 
 import six
+from packaging import version
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
@@ -9,7 +10,6 @@ from tensorflow.python.ops import array_ops, nn
 from .type_generic.custom_op import upstride_conv2d
 from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension
 from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
-from . import tf_version
 
 layers = tf.keras.layers
 
@@ -35,15 +35,13 @@ class GenericConv2D(layers.Conv2D):
                **kwargs):
     # constructor of layers.Conv2D will call initializers.get but we want to be able to send our custom initializers.
     # Here the trick is to change the kernel_initializer to "glorot uniform" and rechange it after
-    self.type2_init = False
     if is_type2_init(kernel_initializer):
-      self.type2_init = True
       self.saved_kernel_initializer = kernel_initializer
       kernel_initializer = 'glorot_uniform'
     # self.groups are used for depthwise convolutions, which were introduced in TF 2.3. The following if statement
     # is a patch that allows us to have the attributes that we need in order to compute depthwise convolutions
-    # regardless the tf_version
-    if tf_version < 2.3:
+    # regardless the tf.__version__
+    if version.parse(tf.__version__) < version.parse("2.3"):
       self.groups = groups
     else:
       kwargs["groups"] = groups
@@ -63,7 +61,7 @@ class GenericConv2D(layers.Conv2D):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    if tf_version < 2.3:
+    if version.parse(tf.__version__) < version.parse("2.3"):
       self._is_causal = self.padding == 'causal'
     # for specific implementation, call this __init__ function and change this value
     self.upstride_datatype = None
@@ -81,8 +79,8 @@ class GenericConv2D(layers.Conv2D):
                                              input_shape))
 
     # change initializer if needed
-    if self.type2_init:
-      self.kernel_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel,
+    if is_type2_init(self.kernel_initializer):
+      self.kernel_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel // self.groups,
                                                  weight_dim=self.rank, nb_filters=self.filters,
                                                  criterion=self.saved_kernel_initializer.split("_")[-1], seed=None)
 
@@ -138,6 +136,7 @@ class GenericConv2D(layers.Conv2D):
                                    dilations=self.dilation_rate,
                                    padding=self.padding.upper(),
                                    data_format=self.data_format,
+                                   groups=self.groups,
                                    name=self.name,
                                    require_input_grad=self.require_input_grad,
                                    use_bias=self.use_bias)

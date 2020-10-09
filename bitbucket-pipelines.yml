@@ -10,7 +10,7 @@ pipelines:
           caches:
             - build-folder    # cache build folder with the compiled binaries
           script:
-            - apt update && apt install -y wget curl git apt-transport-https ca-certificates gnupg software-properties-common
+            - apt update && apt install -y wget curl python3-pip git apt-transport-https ca-certificates gnupg software-properties-common
             - wget --tries=10 --retry-connrefused -q -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
             - apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
             - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
@@ -25,6 +25,7 @@ pipelines:
             - cd ..
             - cp build/libs/_upstride.so src/python/upstride/type_generic
             - cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
+            - pip3 install --upgrade pip && pip3 install packaging
             - python test.py
             - echo "All good."
 
