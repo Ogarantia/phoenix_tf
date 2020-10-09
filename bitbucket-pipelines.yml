@@ -1,9 +1,6 @@
 # This is a sample build configuration for C++ – Make.
 # -----
 
-clone:
-  lfs: true    # enable git lfs to use GCC 8.4 deb package
-
 pipelines:
   pull-requests:
     '**':
@@ -13,11 +10,13 @@ pipelines:
           caches:
             - build-folder    # cache build folder with the compiled binaries
           script:
-            - apt update && apt install -y wget git apt-transport-https ca-certificates gnupg software-properties-common
+            - apt update && apt install -y wget curl git apt-transport-https ca-certificates gnupg software-properties-common
             - wget --tries=10 --retry-connrefused -q -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
             - apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
-            - apt update && apt install -y cmake=3.18.3-0kitware1 cmake-data=3.18.3-0kitware1
-            - git submodule update --init --recursive
+            - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash
+            - apt update && apt install -y cmake=3.18.3-0kitware1 cmake-data=3.18.3-0kitware1 git-lfs
+            - git submodule update --init --recursive && git lfs install
+            - cd core && git lfs fetch && git lfs checkout toolchain/gcc-8.4_8.4-1_x86_64.deb && cd ..
             - dpkg -i core/toolchain/gcc-8.4_8.4-1_x86_64.deb
             - find core/thirdparty -type f -exec touch -t 202009040101 {} +
             - mkdir -p build && cd build

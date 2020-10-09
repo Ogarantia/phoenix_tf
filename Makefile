@@ -1,4 +1,4 @@
-ALLOW_VERBOSE ?= ON		# enables verbose messages in the engine when UPSTRIDE_VERBOSE env variable is set to 1 in runtime
+UPSTRIDE_DEBUG ?= ON	# development build
 GPU ?= OFF				# enables GPU backend
 
 # specifying TensorFlow version (availability depends on the platform)
@@ -37,7 +37,7 @@ build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell fi
 build/Makefile: FP16 ?= ON
 build/Makefile: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake -DWITH_CUDNN=$(GPU) -DALLOW_VERBOSE=$(ALLOW_VERBOSE) -DWITH_FP16=$(FP16) ..
+	@cd build && cmake -DWITH_CUDNN=$(GPU) -DUPSTRIDE_DEBUG=$(UPSTRIDE_DEBUG) -DWITH_FP16=$(FP16) ..
 
 # removes the build folder
 distclean:
@@ -62,7 +62,7 @@ dev_docker:
 # uses dev docker to build production docker image having the Engine as a Python module
 docker: dev_docker
 	@docker run --rm --gpus all -v `pwd`:/opt/upstride -w /opt/upstride $(DEVELOPMENT_DOCKER_REF) \
-				make clean engine GPU=$(GPU) ALLOW_VERBOSE=OFF
+				make clean engine GPU=$(GPU) UPSTRIDE_DEBUG=OFF
 	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
 				  -t $(PRODUCTION_DOCKER_REF) \
 				  -f dockerfiles/prod-$(DOCKERFILE_SUFFIX).dockerfile .
