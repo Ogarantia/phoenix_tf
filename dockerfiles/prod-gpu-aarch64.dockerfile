@@ -21,6 +21,8 @@ RUN cd /opt/upstride && \
     cd / && \
     rm -r /opt/upstride
 
+RUN python3 -m pip install packaging
+
 # enabling libgomp preload to avoid an allocation issue
 # https://github.com/keras-team/keras-tuner/issues/317
 ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1

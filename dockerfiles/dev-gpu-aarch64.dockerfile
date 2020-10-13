@@ -23,7 +23,7 @@ RUN cd cmake-3.18.3 &&\
 
 # install additional tools and python packages
 RUN apt install -y git nano
-RUN python3 -m pip install nvgpu
+RUN python3 -m pip install nvgpu packaging
 
 # install toolchain
 COPY core/toolchain/gcc-8.4_8.4-1_aarch64.deb .

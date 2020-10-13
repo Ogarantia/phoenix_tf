@@ -14,7 +14,7 @@ DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-gpu-`arch`
 PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-gpu-`arch`
 DOCKERFILE_SUFFIX=gpu-`arch`
 else
-DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-$(TF_VERSION)-`arch`
+DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-`arch`
 PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-`arch`
 DOCKERFILE_SUFFIX=`arch`
 endif

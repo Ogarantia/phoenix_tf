@@ -11,3 +11,5 @@ RUN cd /opt/upstride && \
     pip install . && \
     cd / && \
     rm -r /opt/upstride
+
+RUN python3 -m pip install packaging

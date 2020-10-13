@@ -36,6 +36,11 @@ The simplest option to compile the Engine from sources is using the CPU backend 
 
 - Clone this repository and its submodules
 
+- Download and install Git Large File Store (https://git-lfs.github.com/), then checkout the toolchain for the appropriate architecture, e.g.:
+```
+cd core && git lfs fetch && git lfs checkout toolchain/gcc-8.4_8.4-1_x86_64.deb && cd ..
+```
+
 - If you have access to the docker the registry, you may pull the prebuilt development docker. (TODO: add instructions.) Otherwise build it (in the repository root):
 ```bash
 make dev_docker
@@ -70,6 +75,11 @@ If you are lucky to have an NVidia GPU(s), you can get the engine with the GPU s
 The following instructions apply to compile the Engine running on recent GPUs having CUDA compute capability above or equal to 5.3. To compile for an older GPU you need to add `FP16=OFF` option to `make` commands below.
 
 - Clone this repository and its submodules
+
+- Download and install Git Large File Store (https://git-lfs.github.com/), then checkout the toolchain for the appropriate architecture, e.g.:
+```
+cd core && git lfs fetch && git lfs checkout toolchain/gcc-8.4_8.4-1_x86_64.deb && cd ..
+```
 
 - If you have access to the docker the registry, you may pull the prebuilt development docker. (TODO: add instructions.) Otherwise build it (in the repository root):
 ```bash

@@ -11,7 +11,7 @@ RUN wget --tries=10 --retry-connrefused -q -O - https://apt.kitware.com/keys/kit
 
 # install additional tools and python packages
 RUN apt install -y git nano
-RUN python3 -m pip install nvgpu
+RUN python3 -m pip install nvgpu packaging
 
 # install cuDNN and cuBLAS
 RUN apt install -y \
