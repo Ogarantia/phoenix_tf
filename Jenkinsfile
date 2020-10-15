@@ -117,7 +117,6 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry("https://${REGISTRY_PROD}",'registry-prod'){
-                        sh("""docker tag $BUILD_DEV $BUILD_PROD """)
                         sh("""docker push $BUILD_PROD """)
                     }
                 }
