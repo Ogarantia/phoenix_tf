@@ -3,19 +3,19 @@ GPU ?= OFF				# enables GPU backend
 
 # specifying TensorFlow version (availability depends on the platform)
 ifeq ($(shell arch),aarch64)
-TF_VERSION=2.2.0
+TF_VERSION?=2.2.0
 else
-TF_VERSION=2.3.0
+TF_VERSION?=2.3.0
 endif
 
-# setting up docker images references
+# setting up default docker images references (used if not specified)
 ifeq ($(GPU),ON)
-DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-gpu-`arch`
-PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-gpu-`arch`
+DEVELOPMENT_DOCKER_REF?=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-gpu-`arch`
+PRODUCTION_DOCKER_REF ?=upstride:`cat VERSION`-px-tf$(TF_VERSION)-gpu-`arch`
 DOCKERFILE_SUFFIX=gpu-`arch`
 else
-DEVELOPMENT_DOCKER_REF=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-`arch`
-PRODUCTION_DOCKER_REF =upstride:`cat VERSION`-px-tf$(TF_VERSION)-`arch`
+DEVELOPMENT_DOCKER_REF?=upstride:`cat VERSION`-pxdev-tf$(TF_VERSION)-`arch`
+PRODUCTION_DOCKER_REF ?=upstride:`cat VERSION`-px-tf$(TF_VERSION)-`arch`
 DOCKERFILE_SUFFIX=`arch`
 endif
 

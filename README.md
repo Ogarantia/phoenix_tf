@@ -24,9 +24,9 @@ If you are willing to use the Engine without modifying its code, you can pull a 
 ```bash
   docker run -it --rm --gpus all \
     -v $(pwd):/opt/upstride \
-    upstride:0.6-px-tf2.3.0-gpu-x86_64
+    upstride/upstride:$(cat VERSION)-px-tf2.3.0-gpu-x86_64
 ```
-In place of **0.6** you can put another version or remove *-gpu* to get a minimal version without CUDA support (running only on CPU).
+The engine version number is stored in *VERSION* file. You can specify a different version in the docker image reference or remove *-gpu* to get a minimal version without CUDA support (running only on CPU).
 
 ### Compilation in docker
 ''_Docker is life. Thanks to docker we can create a compilation environment with a simple command._'' (c) Sebastien Iooss
@@ -50,7 +50,7 @@ make dev_docker
 ```bash
 docker run -it --rm \
     -v $(pwd):/opt/upstride \
-    upstride:0.6-pxdev-tf2.3.0-x86_64
+    upstride/upstride:$(cat VERSION)-pxdev-tf2.3.0-x86_64
 ```
 
 - Compile the engine in the docker container:
@@ -90,7 +90,7 @@ make dev_docker GPU=ON
 ```bash
 docker run -it --rm --gpus all \
     -v $(pwd):/opt/upstride \
-    upstride:0.6-pxdev-tf2.3.0-gpu-x86_64
+    upstride/upstride:$(cat VERSION)-pxdev-tf2.3.0-gpu-x86_64
 ```
 
 - Compile the engine in the docker container:

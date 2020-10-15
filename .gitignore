@@ -8,3 +8,4 @@ build
 custom_gcc
 *.csv
 *.so.*
+*.idea
