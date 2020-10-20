@@ -3,8 +3,8 @@ import tensorflow as tf
 
 class TestCase(unittest.TestCase):
   """ Base class for unittests containing handy stuff """
-  DEFAULT_ERROR_THRESHOLD = 1e-4
-  HALF_FLOAT_ERROR_THRESHOLD = 1e-2
+  DEFAULT_ERROR_THRESHOLD = 5e-3
+  HALF_FLOAT_ERROR_THRESHOLD = 5e-2
 
   def setup():
     """ Prepares the test module to be executed. Called by unittest.
@@ -26,3 +26,8 @@ class TestCase(unittest.TestCase):
     threshold=self.HALF_FLOAT_ERROR_THRESHOLD if ref.dtype == tf.float16 else self.DEFAULT_ERROR_THRESHOLD
     self.assertLess(err, threshold, f"Absolute {variable} difference with the reference is too big: {err}")
     print(f'[{function}] Absolute {variable} difference:', err.numpy())
+
+def apply_some_non_linearity(x):
+  """ Applies some non linearity to the input x so that the unitary tests are robust wrt to the gradient.
+  """
+  return tf.where(tf.math.abs(x) > 1, tf.math.abs(x) - 0.5, 0.5*x**2)

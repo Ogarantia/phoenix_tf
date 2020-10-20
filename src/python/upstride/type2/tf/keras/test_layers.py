@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from upstride.type_generic.test import TestCase
+from upstride.type_generic.test import TestCase, apply_some_non_linearity
 
 
 def setUpModule():
@@ -24,8 +24,8 @@ def get_gradient_and_output_tf(inputs, function, kernels, bias=None):
       Transposes the returned arguments so that it corresponds to channels_first
   """
   dbias = None
+  biases = []
   if bias is not None:
-    biases = []
     for i in range(bias.shape[0]):
       biases.append(bias[i, :])
   with tf.GradientTape(persistent=True) as gt:
@@ -35,9 +35,10 @@ def get_gradient_and_output_tf(inputs, function, kernels, bias=None):
     if bias is not None:
       for b in biases:
         gt.watch(b)
-    outputs = function(inputs, kernels)
+    outputs = function(inputs, kernels, biases)
+    for i in range(len(outputs)):
+      outputs[i] = apply_some_non_linearity(outputs[i])
     if bias is not None:
-      outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
       dbias = [gt.gradient(outputs, b) for b in biases]
     outputs = [tf.transpose(outputs[i], [0, 3, 1, 2]) for i in range(len(outputs))]
   dinputs = [gt.gradient(outputs, e) for e in inputs]
@@ -56,6 +57,7 @@ def get_gradient_and_output_upstride(inputs, op):
     if op.bias is not None:
       gt.watch(op.bias)
     outputs = op(inputs)
+    outputs = apply_some_non_linearity(outputs)
   dinputs = gt.gradient(outputs, inputs)
   if op.bias is not None:
     dbias = gt.gradient(outputs, op.bias)
@@ -179,13 +181,13 @@ class TestType2Conv2D(TestCase):
       upstride_conv.set_weights([weights])
     kernels = upstride_conv.kernel  # copies the quaternion kernel
 
-    def py_conv(inputs, kernels):
-      def tf_op(i, k):
-        # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
-        k = tf.transpose(k, [2, 3, 1, 0])
-        output = tf.nn.conv2d(i, k, strides=strides, padding=padding, dilations=dilations)
-        return output
-      return quaternion_mult_naive(tf_op, inputs, kernels)
+    def py_conv(inputs, kernels, biases):
+      # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
+      tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, [2, 3, 1, 0]), strides=strides, padding=padding, dilations=dilations)
+      outputs = quaternion_mult_naive(tf_op, inputs, kernels)
+      if biases != []:
+        outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
+      return outputs 
 
     dinput_test, dkernels_test, dbias_test, output_test = get_gradient_and_output_upstride(cpp_inputs, upstride_conv)
     dinput_ref, dkernels_ref, dbias_ref, output_ref = get_gradient_and_output_tf(py_inputs, py_conv, kernels, bias)
@@ -263,6 +265,7 @@ class TestType2Dense(TestCase):
         for e in inputs:
           gt.watch(e)
         outputs = tf.concat(function(inputs, kernels), axis=0)
+        outputs = apply_some_non_linearity(outputs)
       dinputs = tf.concat([gt.gradient(outputs, e) for e in inputs], axis=0)
       dkernels = tf.concat(gt.gradient(outputs, kernels), axis=0)
     else: # UPSTRIDE
@@ -271,6 +274,7 @@ class TestType2Dense(TestCase):
         if bias is not None:
           gt.watch(bias)
         outputs = function(inputs, kernels)
+        outputs = apply_some_non_linearity(outputs)
       dinputs, dkernels = gt.gradient(outputs, [inputs, kernels])
     if bias is not None:
       dbias = gt.gradient(outputs, bias)

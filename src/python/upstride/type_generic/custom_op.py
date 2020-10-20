@@ -14,10 +14,14 @@ upstride_dense = upstride_ops.upstride_dense
 
 @ops.RegisterGradient("UpstrideConv2D")
 def _conv2d_grad(op, grad):
-  if len(op.inputs[2].shape) == 1:
-    dbias = tf.reduce_sum(grad[:, 0]) * tf.ones_like(op.inputs[2]) # bias gradient of scalar convolutions is a 1D tensor
-  else:
-    dbias = tf.reduce_sum(grad[:, 0]) // op.inputs[2].shape[0] * tf.ones_like(op.inputs[2])
+  numel_dtype = op.inputs[2].shape[0] if op.get_attr('uptype') != 0 and op.inputs[2].shape[0] != 0 else 1 # number of elements of the datatype
+  # The bias gradient is the sum of the incoming gradient. The elements of our datatype are interlaced
+  # in the incoming gradient. Hence, we reshape to unscrumble the interlacement before the computing the addition.
+  # op.inputs[2] is the bias. When the bias does not exist, op.inputs[2].shape = [0], which is not handy for the reshape hereafter
+  # Given that op.inputs[1].shape[-1] is equal to op.inputs.[2].shape[-1] when the bias exist and that we do not care of dbias
+  # when the bias does not exist, using op.inputs[1].shape[-1] is preferable over op.inputs.[2].shape[-1] to avoid 0
+  grad_reshape = tf.reshape(grad, [numel_dtype, -1] + grad.shape[1:].as_list())
+  dbias = tf.reduce_sum(grad_reshape, [1, 3, 4])
   return upstride_ops.upstride_conv2d_grad(grad, op.inputs[0], op.inputs[1],
                                            uptype=op.get_attr('uptype'),
                                            strides=op.get_attr("strides"),
@@ -29,11 +33,14 @@ def _conv2d_grad(op, grad):
 
 @ops.RegisterGradient("UpstrideDense")
 def _dense_grad(op, grad):
-  # op.inputs[2].shape[0] is the number of elements of the datatype
-  # for scalars, dbias is tf.reduce_sum(grad[:, 0]) * tf.ones_like(op.inputs[2])
-  # the extrapolation for multivectors is done by dividing tf.reduce_sum(grad[:, 0]) by the number of blades in the multivector
-  dbias = tf.reduce_sum(grad[:, 0]) // op.inputs[2].shape[0] * tf.ones_like(op.inputs[2])
+  numel_dtype = op.inputs[2].shape[0] if op.inputs[2].shape[0] != 0 else 1 # number of elements of the datatype
+  # The bias gradient is the sum of the incoming gradient. The elements of our datatype are interlaced
+  # in the incoming gradient. Hence, we reshape to unscrumble the interlacement before the computing the addition.
+  # op.inputs[2] is the bias. When the bias does not exist, op.inputs[2].shape = [0], which is not handy for the reshape hereafter
+  # Given that op.inputs[1].shape[-1] is equal to op.inputs.[2].shape[-1] when the bias exist and that we do not care of dbias
+  # when the bias does not exist, using op.inputs[1].shape[-1] is preferable over op.inputs.[2].shape[-1] to avoid 0
+  grad_reshape = tf.reshape(grad, [numel_dtype, -1, op.inputs[1].shape[-1]])
+  dbias = tf.reduce_sum(grad_reshape, 1)
   return upstride_ops.upstride_dense_grad(grad, op.inputs[0], op.inputs[1],
                                            uptype=op.get_attr('uptype'),
                                            require_input_grad=op.get_attr("require_input_grad")), dbias
-

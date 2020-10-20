@@ -1,7 +1,7 @@
 import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
-from upstride.type_generic.test import TestCase
+from upstride.type_generic.test import TestCase, apply_some_non_linearity
 from packaging import version
 from .layers import DepthwiseConv2D
 
