@@ -23,7 +23,7 @@ pipelines:
             - CC=/usr/local/bin/gcc8.4 CXX=/usr/local/bin/g++8.4 cmake -DWITH_CUDNN=OFF ..
             - make -j4
             - cd ..
-            - cp build/libs/_upstride.so src/python/upstride/type_generic
+            - cp build/libs/libupstride.so src/python/upstride/type_generic
             - cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
             - pip3 install --upgrade pip && pip3 install packaging
             - python test.py

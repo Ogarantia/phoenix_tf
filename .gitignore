@@ -1,11 +1,9 @@
 *.png
-*.egg-info
 *.so
 __pycache__
 *.pdf
 build
 .vscode
-custom_gcc
 *.csv
 *.so.*
 *.idea

@@ -5,6 +5,7 @@ project(UpStride)
 
 option(WITH_ONEDNN "Enable oneDNN backend (CPU)" ON)
 option(WITH_CUDNN "Enable cuDNN backend (GPU)" OFF)
+option(ARCH "Enable optimization for specific arch (x86_64 / aarch64 / <spe_march>)" OFF)
 
 # include core
 include(${CMAKE_CURRENT_SOURCE_DIR}/core/CMakeLists.txt)
@@ -18,9 +19,9 @@ set(SOURCES ${SOURCES}
 )
 
 # add the library
-add_library(_upstride SHARED ${SOURCES})
+add_library(libupstride SHARED ${SOURCES})
 
-SET_TARGET_PROPERTIES(_upstride PROPERTIES
+SET_TARGET_PROPERTIES(libupstride PROPERTIES
   PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libs/")
 
@@ -49,7 +50,7 @@ message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 # Compilation (optimization) flags setup #
 ##########################################
 # Setup common optimization flags
-set(OPTIMIZATION_FLAGS "-O3 -march=native -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
+set(OPTIMIZATION_FLAGS "-O3 -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
 
 # Setup optimization flags according to the compiler
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -57,8 +58,12 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 # Setup optimization flags according to processor vendor
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -mfma -mavx2")
+if (ARCH STREQUAL "x86_64")
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=skylake -mfma -mavx2")
+elseif (ARCH STREQUAL "aarch64")
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=armv8-a+crypto+simd -mcpu=cortex-a57+crypto+simd")
+else()
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=${ARCH}")
 endif()
 
 # Enable debug and opitmization flags

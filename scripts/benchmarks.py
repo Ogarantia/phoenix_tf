@@ -57,36 +57,34 @@ update_engine:
   Pull from a specific commit
 
 #### OS functions
-modify_python_path:
-  Change the python path to set the one for the engine you would like to bench
-set_gpu_use:
-  Set a specific env var to tell on which GPU(s) you would like to run
-get_compilation_flags:
-  Get compilation flags used to compile _upstride.so
-setup_env:
-  Pip install few modules that can missing to run benchs/tests
-print_generic_info:
-  Print information about the system and the OS
-write_generic_info:
-  Write generic information in a context["resdir"]/INFO.txt file
-print_error:
-  Print error message using red color
-print_warning:
-  Print warning message using yellow color
-print_info:
-  Print information message using grey background
-print_dbg:
-  Print debug message only when debug mode is enabled
+ modify_python_path:
+    Change the python path to set the one for the engine you would like to bench
+ set_gpu_use:
+    Set a specific env var to tell on which GPU(s) you would like to run
+ get_compilation_flags:
+    Get compilation flags used to compile libupstride.so
+ setup_env:
+    Pip install few modules that can missing to run benchs/tests
+ print_generic_info:
+    Print information about the system and the OS
+ write_generic_info:
+    Write generic information in a context["resdir"]/INFO.txt file
+ print_error:
+    Print error message using red color
+ print_warning:
+    Print warning message using yellow color
+ print_info:
+    Print information message using grey background
+ print_dbg:
+    Print debug message only when debug mode is enabled
 
 ### Run example
-python3 benchmarks.py # Just print info context and os
 # Run interactive mode that gonna ask to you to fill all information about what you want to run
 python3 benchmarks.py -i
 # Run benchmarks on the latest commit of the master branch, distclean and compile, then run all bench using the _upstride.so of the project
 python3 benchamrks.py --branch=master --update=True --gen_all_res --lib_path=/path/to/_upstride.so
 # Generate all results possible using default information we have
 python3 benchamrks.py -gar
-
 """
 import functools    # static function
 import nvgpu        # to get gpu info

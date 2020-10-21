@@ -1,5 +1,7 @@
 UPSTRIDE_DEBUG ?= ON	# development build
 GPU ?= OFF				# enables GPU backend
+PYTHON ?= python3
+ARCH ?= `arch`           # possible values are local, x86_64 and aarch64
 
 # specifying TensorFlow version (availability depends on the platform)
 ifeq ($(shell arch),aarch64)
@@ -23,12 +25,16 @@ endif
 SOURCE_PATH=src
 CORE_SOURCE_PATH=core/src
 
-.PHONY : engine distclean clean install dev_docker docker build_nsight run_nsight
+.PHONY : engine wheel distclean clean install install_wheel dev_docker docker build_nsight run_nsight
 
 # default target building the shared objects and placing them nicely to run tests
 engine:
 	@make -s build/*.so
 	@make install
+
+# building engine and create a wheel file; it will only remain to pip install this wheel file to install it
+wheel: engine install
+	@$(PYTHON) src/python/cythonizer.py bdist_wheel --dist-dir build clean --arch $(ARCH)
 
 build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
 	@cd build && make VERBOSE=$(if $(VERBOSE),1,0) -j`nproc`
@@ -37,7 +43,7 @@ build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell fi
 build/Makefile: FP16 ?= ON
 build/Makefile: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake -DWITH_CUDNN=$(GPU) -DUPSTRIDE_DEBUG=$(UPSTRIDE_DEBUG) -DWITH_FP16=$(FP16) ..
+	@cd build && cmake -DWITH_CUDNN=$(GPU) -DUPSTRIDE_DEBUG=$(UPSTRIDE_DEBUG) -DWITH_FP16=$(FP16) -DARCH=$(ARCH) ..
 
 # removes the build folder
 distclean:
@@ -46,11 +52,17 @@ distclean:
 # Clean the build folder
 clean:
 	@touch CMakeLists.txt
-	@rm -f build/libs/_upstride.so build/tests
+	@rm -f build/libs/libupstride.so build/tests
+
+install_wheel: PYTHON_IMPORTLIB_PATH=`$(PYTHON) -c "import importlib; print(importlib.__path__[0])"`
+install_wheel: wheel
+	@$(PYTHON) -m pip install build/upstride*`arch`.whl
+	@ln -s $(PWD)/build/cython/libupstride.so $(PYTHON_IMPORTLIB_PATH)/libupstride.so
+	@ln -s $(PWD)/build/cython/libdnnl.so.1   $(PYTHON_IMPORTLIB_PATH)/libdnnl.so.1
 
 # copy shared objects side-by-side with Python code
 install:
-	@cp build/libs/_upstride.so src/python/upstride/type_generic
+	@cp build/libs/libupstride.so src/python/upstride/type_generic
 	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
 
 # build docker with the compilation environment
@@ -62,7 +74,7 @@ dev_docker:
 # uses dev docker to build production docker image having the Engine as a Python module
 docker: dev_docker
 	@docker run --rm --gpus all -v `pwd`:/opt/upstride -w /opt/upstride $(DEVELOPMENT_DOCKER_REF) \
-				make clean engine GPU=$(GPU) UPSTRIDE_DEBUG=OFF
+				make clean install_wheel GPU=$(GPU) UPSTRIDE_DEBUG=OFF
 	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
 				  -t $(PRODUCTION_DOCKER_REF) \
 				  -f dockerfiles/prod-$(DOCKERFILE_SUFFIX).dockerfile .

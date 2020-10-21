@@ -1,5 +1,5 @@
-FROM nvcr.io/nvidia/l4t-base:r32.4.3
 ARG TF_VERSION
+FROM nvcr.io/nvidia/l4t-base:r32.4.3
 
 # install tensorflow
 RUN apt-get update && apt-get install -y python3-pip python3-dev build-essential pkg-config \
@@ -14,12 +14,18 @@ RUN pip3 install --pre --extra-index-url https://developer.download.nvidia.com/c
 COPY dockerfiles/bash.bashrc /root/.bash_aliases
 
 # install the python package in the docker
-COPY src/python/ /opt/upstride
+COPY build/ /opt/upstride
+RUN export IMPORTLIBPATH=`python3 -c "import importlib; print(importlib.__path__[0])"`
 RUN cd /opt/upstride && \
-    ls upstride/type_generic/_upstride.so && \
-    pip install . && \
-    cd / && \
-    rm -r /opt/upstride
+    ls libs/libupstride.so && \
+    ls core/thirdparty/onednn/src/libdnnl.so.1 && \
+    ln -s /opt/upstride/libs/libupstride.so $IMPORTLIBPATH/libupstride.so && \
+    ln -s /opt/upstride/core/thirdparty/onednn/src/libdnnl.so.1 $IMPORTLIBPATH/libdnnl.so.1 && \
+    ls $IMPORTLIBPATH/libupstride.so && \
+    ls $IMPORTLIBPATH/libdnnl.so.1 && \
+    pip install upstride-*.whl && \
+    cd / && rm -r /opt/upstride
+RUN unset IMPORTLIBPATH
 
 RUN python3 -m pip install packaging
 

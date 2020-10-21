@@ -11,7 +11,7 @@ RUN wget --tries=10 --retry-connrefused -q -O - https://apt.kitware.com/keys/kit
 
 # install additional tools and python packages
 RUN apt install -y git nano
-RUN python3 -m pip install nvgpu packaging
+RUN python3 -m pip install nvgpu packaging cython
 
 # install toolchain
 COPY core/toolchain/gcc-8.4_8.4-1_x86_64.deb .
