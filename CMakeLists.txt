@@ -58,7 +58,9 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 # Setup optimization flags according to processor vendor
-if (ARCH STREQUAL "x86_64")
+if (ARCH STREQUAL "OFF")
+  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=native")
+elseif (ARCH STREQUAL "x86_64")
   set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=skylake -mfma -mavx2")
 elseif (ARCH STREQUAL "aarch64")
   set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=armv8-a+crypto+simd -mcpu=cortex-a57+crypto+simd")
