@@ -1,5 +1,5 @@
-ARG TF_VERSION
 FROM nvcr.io/nvidia/l4t-base:r32.4.3
+ARG TF_VERSION
 
 # install tensorflow
 RUN apt-get update && apt-get install -y python3-pip python3-dev build-essential pkg-config \
