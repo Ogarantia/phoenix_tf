@@ -109,18 +109,10 @@ class TestType2Conv2DBasic(unittest.TestCase):
     kernels = upstride_conv.kernel  # take the quaternion kernel
 
     inputs = tf.random.uniform((4, 1, 1, 1))
-
     # upstride conv
     upstride_output = upstride_conv(inputs)
-
-    def tf_op(i, k):
-      # upstride kernel is (O, I, H, W). TF expect (H, W, I, O)
-      k = tf.transpose(k, [2, 3, 1, 0])
-      output = tf.nn.conv2d(i, k, 1, "SAME")
-      return output
-
+    tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, [2, 3, 1, 0]), 1, "SAME") # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
     inputs = tf.reshape(inputs, [4, 1, 1, 1, 1])
-
     tf_output = quaternion_mult_naive(tf_op, inputs, kernels)
 
     for i in range(4):
@@ -162,10 +154,9 @@ class TestType2Conv2D(TestCase):
   """ Implements quaternion convolution unitary testing varying img_size, filter_size, 
       in_channels, out_channels, padding, strides, dilations and use_bias.
   """
-  def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
+  def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, batch_size=3):
     # initialize inputs
-    tf.random.set_seed(45)
-    py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
+    py_inputs = [tf.cast(tf.random.uniform((batch_size, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
     py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
@@ -204,17 +195,18 @@ class TestType2Conv2D(TestCase):
       dbias_ref_concat = tf.convert_to_tensor(dbias_ref)
       self.assert_and_print(dbias_test, dbias_ref_concat, "TestType2Conv2D", "dbias")
 
-  def test_upstride_inputs_backprop(self):
+  def test_type2_conv2d(self):
     try:
       tf.keras.backend.set_image_data_format('channels_first')  # FIXME We should find a proper way to pass 'channels_first'
-      self.run_test(img_size=1, filter_size=1, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1])
-      self.run_test(img_size=1, filter_size=1, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True)
-      self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1])
-      self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True)
+      self.run_test(img_size=1, filter_size=1, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=4)
+      self.run_test(img_size=1, filter_size=1, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True, batch_size=4)
+      self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=5)
+      self.run_test(img_size=4, filter_size=2, in_channels=1, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=True, batch_size=5)
       self.run_test(img_size=7, filter_size=3, in_channels=2, out_channels=2, padding='VALID')
       self.run_test(img_size=7, filter_size=3, in_channels=2, out_channels=2, padding='VALID', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID')
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID', use_bias=True)
+      self.run_test(img_size=9, filter_size=6, in_channels=10, out_channels=5, padding='VALID', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME')
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME', use_bias=True)
       self.run_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, strides=[2, 2])
@@ -231,29 +223,66 @@ class TestType2Conv2D(TestCase):
       tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
 
 
-# TODO quaternionic depthwise convolution unitary tests.
-class TestType2DepthwiseConv2d(TestCase):
-  def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False):
-    """ Test to verify that we are able to call depthwise convolution through the python interface.
+class TestType2DepthwiseConv2D(TestCase):
+  def run_depthwise_conv2d_test(self, img_size=128, filter_size=3, channels=2, use_bias=False, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=3):
+    """ Runs a single depthwise convolution forward and backward and compares the result with TensorFlow output
     """
-    tf.random.set_seed(45)
-    py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
+    # Initializes inputs: For tensorflow/python-based engine, list of 4 tensors. For phoenix, tf.concat(py_inputs)
+    py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
     py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
+    # Defines upstride model and initializes weights.
+    model_up = DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, bias_initializer='glorot_uniform', use_bias=use_bias)
+    model_up(cpp_inputs)
+    # Defines model_up.kernel as being equal to depthwise_kernel. It is necessary to use get_gradient_and_output_upstride()
+    model_up.kernel = model_up.depthwise_kernel
 
-    upstride_depthwise_conv = DepthwiseConv2D(kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
-    upstride_depthwise_conv2 = DepthwiseConv2D(kernel_size=3) # TODO remove this line
+    dinputs_upstride, dweights_upstride, dbias_upstride, output_upstride = get_gradient_and_output_upstride(cpp_inputs, model_up)
 
-    upstride_depthwise_conv2(cpp_inputs)
-    upstride_depthwise_conv(cpp_inputs) # runs a first time to initialize the kernel
+    # Defines model_tf as being the quaternion multiplication of depthwise_conv2d + bias
+    def model_tf(inputs, depthwise_kernel_tf, biases):
+      tf_op = lambda i,k : tf.keras.backend.depthwise_conv2d(i, k, strides=tuple(strides), padding=padding.lower(), dilation_rate=tuple(dilations), data_format='channels_last')
+      outputs = quaternion_mult_naive(tf_op, inputs, depthwise_kernel_tf)
+      if biases != []:
+        outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
+      return outputs
 
-  def test_type2_depthwise_conv2d(self):
-    try:
-      tf.keras.backend.set_image_data_format('channels_first')  # FIXME We should find a proper way to pass 'channels_first'
-      self.run_test()
-    finally:
-      tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
+    # Defines depthwise_kernel_tf from model_up.depthwise_kernel as being a list and transposing it elements from iohw to hwio
+    depthwise_kernel_tf = []
+    for i in range(4):
+      depthwise_kernel_tf.append(tf.transpose(model_up.depthwise_kernel[i, :], [2, 3, 0, 1]))
 
+    dinputs_tf_list, dweights_tf_list, dbias_tf_list, output_tf_list = get_gradient_and_output_tf(py_inputs, model_tf, depthwise_kernel_tf, bias=model_up.bias if use_bias else None)
+
+    # Transforms the list of tensors from python/tensorflow-based engine into tensors, for comparing them later on
+    output_tf = tf.concat(output_tf_list, axis=0)
+    dinputs_tf = tf.concat(dinputs_tf_list, axis=0)
+    dweights_tf = tf.transpose(tf.stack(dweights_tf_list, axis=0), [0, 3, 4, 1, 2])
+    if use_bias:
+      dbias_tf = tf.stack(dbias_tf_list, axis=0)
+
+    self.assert_and_print(output_upstride, output_tf, "Type2DepthwiseConv2DBwd", "output")
+    self.assert_and_print(dweights_upstride, dweights_tf, "Type2DepthwiseConv2DBwd", "dfilter")
+    self.assert_and_print(dinputs_upstride, dinputs_tf, "Type2DepthwiseConv2DBwd", "dinput")
+    if use_bias:
+      self.assert_and_print(dbias_upstride, dbias_tf, "Type2DepthwiseConv2DBwd", "dbias")
+
+  def test_conv2dgrad(self):
+    self.run_depthwise_conv2d_test(img_size=5, filter_size=3, channels=4, padding='VALID', batch_size=2)
+    self.run_depthwise_conv2d_test(img_size=5, filter_size=3, channels=4, padding='VALID', batch_size=4, use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, padding='VALID', batch_size=5)
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, padding='VALID', use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, padding='SAME')
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, padding='SAME', use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=10, channels=12, padding='SAME', use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, strides=[2, 2])
+    self.run_depthwise_conv2d_test(img_size=9, filter_size=3, channels=3, strides=[2, 2], use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, padding='VALID')
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, padding='VALID', use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, padding='SAME')
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, padding='SAME', use_bias=True)
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2])
+    self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2], use_bias=True)
 
 class TestType2Dense(TestCase):
   def get_gradient_and_output(self, inputs, function, kernels, bias):
@@ -286,31 +315,22 @@ class TestType2Dense(TestCase):
     """ Runs a single dense and compares the result with TensorFlow output """
     py_inputs = [tf.random.uniform((batch_size, in_features), dtype=tf.float32, minval=-1, maxval=1) for _ in range(4)]
     cpp_inputs = tf.concat(py_inputs, axis=0)
-    upstride_dense = Dense(out_features, use_bias=use_bias)
-
-    upstride_dense(cpp_inputs) # runs a first time to initialize the kernel
-    kernels = upstride_dense.kernel  # copies the quaternion kernel
-    if use_bias:
-      bias = tf.random.uniform(upstride_dense.bias.shape, dtype=tf.float32, minval=-1, maxval=1)
-      upstride_dense.bias = bias
-    else:
-      bias = None
+    model = Dense(out_features, bias_initializer='glorot_uniform', use_bias=use_bias)
+    model(cpp_inputs) # runs a first time to initialize the kernel and the bias, according to use_bias
 
     def cpp_dense(inputs, kernels):
-      return upstride_dense(inputs)
+      return model(inputs)
 
     def py_dense(inputs, kernels):
-      def tf_op(i, k):
-        output = tf.linalg.matmul(i, k)
-        return output
+      tf_op = lambda i,k : tf.linalg.matmul(i, k)
       output = quaternion_mult_naive(tf_op, inputs, kernels)
-      if bias is not None:
+      if use_bias:
         for i in range(4):
-          output[i] = tf.nn.bias_add(output[i], bias[i, :])
+          output[i] = tf.nn.bias_add(output[i], model.bias[i, :])
       return output
 
-    dinput_test, dkernels_test, dbias_test, output_test = self.get_gradient_and_output(cpp_inputs, cpp_dense, kernels, bias)
-    dinput_ref, dkernels_ref, dbias_ref, output_ref = self.get_gradient_and_output(py_inputs, py_dense, kernels, bias)
+    dinput_test, dkernels_test, dbias_test, output_test = self.get_gradient_and_output(cpp_inputs, cpp_dense, model.kernel, model.bias if use_bias else None)
+    dinput_ref, dkernels_ref, dbias_ref, output_ref = self.get_gradient_and_output(py_inputs, py_dense, model.kernel, model.bias if use_bias else None)
 
     self.assert_and_print(output_test, output_ref, "Type2Dense")
     self.assert_and_print(dinput_test, dinput_ref, "Type2Dense", "dinput")
@@ -320,7 +340,7 @@ class TestType2Dense(TestCase):
 
   def test_dense(self):
     self.run_test(batch_size=1, in_features=1, out_features=1)
-    self.run_test(batch_size=2, in_features=3, out_features=4)
+    self.run_test(batch_size=2, in_features=3, out_features=4, use_bias=True)
     self.run_test(batch_size=64, in_features=64, out_features=10)
     self.run_test(batch_size=64, in_features=64, out_features=10, use_bias=True)
     self.run_test(batch_size=2, in_features=4, out_features=3, use_bias=True)

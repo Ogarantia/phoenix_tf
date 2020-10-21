@@ -3,59 +3,47 @@ import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
 from upstride.type_generic.test import TestCase, apply_some_non_linearity
 from packaging import version
-from .layers import DepthwiseConv2D
+from .layers import DepthwiseConv2D, Dense
 
 def setUpModule():
   TestCase.setup()
 
 
-def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32):
-  input_upstride = tf.random.uniform((2,  # N (batch size)
-                                      in_channels,  # C
-                                      img_size,  # H
-                                      img_size),  # W
-                                     dtype=dtype, minval=-0.5, maxval=0.5)
+def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32, batch_size=2, val=0.5):
+  #                                   N (batch size),   C,        H,        W
+  input_upstride = tf.random.uniform((batch_size, in_channels, img_size, img_size), dtype=dtype, minval=-val, maxval=val)
   filter_upstride = tf.random.uniform((out_channels,  # channel multiplier or channels per groups. for depthwise conv, 1 channel per groups
                                        in_channels,  # C number of channel or number of groups
                                        filter_size,  # H
                                        filter_size),  # W
-                                      dtype=dtype, minval=-0.5, maxval=0.5)
+                                      dtype=dtype, minval=-val, maxval=val)
   input_tf = tf.transpose(input_upstride, [0, 2, 3, 1])  # input is now [N  H  W  C]
   filter_tf = tf.transpose(filter_upstride, [2, 3, 1, 0])
 
   if (use_bias):
-    bias = tf.random.uniform((out_channels,), dtype=dtype, minval=-0.5, maxval=0.5)
+    bias = tf.random.uniform((out_channels,), dtype=dtype, minval=-val, maxval=val)
   else:
     bias = []
   return input_upstride, filter_upstride, input_tf, filter_tf, bias
 
-
-def get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias):
-  input_upstride = tf.random.normal((2,  # N (batch size)
-                                     in_channels,  # C
-                                     img_size,  # H
-                                     img_size),  # W
-                                    dtype=tf.float32)
-  filter_upstride = tf.random.normal((in_channels,  # C number of channel or number of groups
-                                      1,  # channel multiplier or channels per groups. for depthwise conv, 1 channel per groups
-                                      filter_size,  # H
-                                      filter_size),  # W
-                                     stddev=1/(filter_size ** 2 * in_channels),
-                                     dtype=tf.float32)
-  input_tf = tf.transpose(input_upstride, [0, 2, 3, 1])  # input is now [N  H  W  C]
-  filter_tf = tf.transpose(filter_upstride, [2, 3, 0, 1])  # now filter is [H  W  I  O]
-
-  if (use_bias):
-    bias = tf.random.uniform((in_channels,), dtype=tf.float32, minval=-0.5, maxval=0.5)
-  else:
-    bias = []
-  return input_upstride, filter_upstride, input_tf, filter_tf, bias
-
+def get_output_and_gradients(model, kernel, inputs):
+  with tf.GradientTape(persistent=True) as gt:
+    gt.watch([kernel, inputs])
+    if model.bias is not None:
+      gt.watch(model.bias)
+    output = model(inputs)
+    output = apply_some_non_linearity(output)
+    if model.bias is not None:
+      dinputs, dweights, dbias = gt.gradient(output, [inputs, kernel, model.bias])
+    else:
+      dinputs, dweights = gt.gradient(output, [inputs, kernel])
+      dbias = None
+  return output, dinputs, dweights, dbias
 
 class TestConv2D(TestCase):
-  def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32):
+  def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32, batch_size=2):
     """ Runs a single convolution and compares the result with TensorFlow output """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype)
+    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype, batch_size)
 
     # run upstride convolution
     output_upstride = upstride_ops.upstride_conv2d(
@@ -83,9 +71,9 @@ class TestConv2D(TestCase):
 
 
   def test_conv2d(self):
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID')
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME')
+    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=3)
+    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=4, use_bias=True)
+    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', batch_size=5)
     self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', use_bias=True)
     self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2])
     self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2], use_bias=True)
@@ -208,9 +196,9 @@ class TestConv2D(TestCase):
 
 
 class TestConv2DGrad(TestCase):
-  def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32):
+  def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32, batch_size=2):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype)
+    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype, batch_size)
 
     # UPSTRIDE
     with tf.GradientTape(persistent=True) as gt:
@@ -258,9 +246,9 @@ class TestConv2DGrad(TestCase):
       self.assert_and_print(grad_test_bias, grad_reference_bias_tf, "TestConv2DGrad", "dbias")
 
   def test_conv2dgrad(self):
-    self.run_conv2dgrad_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID')
-    self.run_conv2dgrad_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID', use_bias=True)
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID')
+    self.run_conv2dgrad_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID', batch_size=3)
+    self.run_conv2dgrad_test(img_size=8, filter_size=3, in_channels=2, out_channels=2, padding='VALID', batch_size=4, use_bias=True)
+    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID', batch_size=5)
     self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='VALID', use_bias=True)
     self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME')
     self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, out_channels=16, padding='SAME', use_bias=True)
@@ -283,120 +271,48 @@ class TestConv2DGrad(TestCase):
 
 
 class TestDepthwiseConv2D(TestCase):
-  def run_conv2d_test(self, img_size=9, filter_size=3, in_channels=64, use_bias=False, padding='VALID', strides=[1, 1, 1, 1], dilations=[1, 1]):
-    """ Runs a single convolution and compares the result with TensorFlow output """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias)
-
-    # run TF convolution on a properly transposed input
-    output_tf = tf.nn.depthwise_conv2d(
-        input_tf, filter_tf,
-        strides=strides,
-        padding=padding,
-        dilations=dilations)
-    if (use_bias):
-      output_tf = tf.nn.bias_add(output_tf, bias)
-
-    # DepthwiseConv2D using conv2D with groups == input channels
-    output_upstride = upstride_ops.upstride_conv2d(
-        input_upstride, filter_upstride, bias,
-        strides=strides,
-        padding=padding,
-        dilations=dilations,
-        data_format='NCHW',
-        groups=in_channels,
-        use_bias=use_bias)
-    output_tf = tf.transpose(output_tf, [0, 3, 1, 2])
-
-    # COMPARISONS
-    self.assert_and_print(output_upstride, output_tf, "DepthwiseConv2DFwd", "output")
-
-  def test_conv2d(self):
-    self.run_conv2d_test(img_size=5, filter_size=3, in_channels=4, padding='VALID')
-    self.run_conv2d_test(img_size=5, filter_size=3, in_channels=4, padding='VALID', use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=64, padding='VALID')
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=64, padding='SAME')
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=64, padding='SAME', use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=64, strides=[1, 2, 2, 1])
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=64, strides=[1, 2, 2, 1], use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=32, padding='VALID')
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=32, padding='VALID', use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=32, padding='SAME')
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=32, padding='SAME', use_bias=True)
-    self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2])
-    self.run_conv2d_test(img_size=112, filter_size=6, in_channels=32, dilations=[2, 2], use_bias=True)
-
-  def run_depthwise_conv2d_python_constructor(self, img_size=9, filter_size=3, in_channels=64, use_bias=False, padding='VALID', strides=(1, 1), dilations=[1, 1]):
-    """ Test to verify that we are able to call depthwise convolution through the python interface.
-    """
-    cpp_inputs = tf.random.normal((2,           # N (batch size)
-                                   in_channels, # C
-                                   img_size,    # H
-                                   img_size),   # W
-                                   dtype=tf.float32)
-    upstride_depthwise_conv = DepthwiseConv2D(kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
-    upstride_depthwise_conv(cpp_inputs) # runs a first time to initialize the kernel
-
-  def test_depthwise_conv2d_python_constructor(self, img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=True):
-    try:
-      tf.keras.backend.set_image_data_format('channels_first')  # FIXME We should find a proper way to pass 'channels_first'
-      self.run_depthwise_conv2d_python_constructor(img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=True)
-      self.run_depthwise_conv2d_python_constructor(img_size=224, filter_size=3, in_channels=64, padding='VALID', use_bias=False)
-    finally:
-      tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
-
-
-class TestDepthwiseConv2DGrad(TestCase):
-  def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, use_bias=False, padding='SAME', strides=[1, 1, 1, 1], dilations=[1, 1]):
+  def run_dw_conv2d_test(self, img_size=128, filter_size=3, channels=2, use_bias=False, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=2):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output
     """
-    input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters_depthwise(in_channels, img_size, filter_size, use_bias)
+    #                               N    , Channels,  Height ,   Width
+    inputs = tf.random.normal((batch_size, channels, img_size, img_size), dtype=tf.float32)
+    # Defines models
+    model_up = DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', bias_initializer='glorot_uniform', dilation_rate=dilations, use_bias=use_bias)
+    model_tf = tf.keras.layers.DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, use_bias=use_bias)
+    # Call the models for the first time so that the weights get initialized and can be modified later on
+    model_up(inputs)
+    model_tf(inputs)
+    # Sets weights from the TF model to be equal to the ones on the Phoenix model, up to a transposition
+    ref_params = model_up.get_weights()
+    if use_bias:
+      model_tf.set_weights([tf.transpose(ref_params[0], [2, 3, 0, 1]), ref_params[1][0, :]])
+    else:
+      model_tf.set_weights([tf.transpose(ref_params[0], [2, 3, 0, 1])])
 
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch([filter_tf, input_tf])
-      output_tf = tf.nn.conv2d(
-          input_tf, filter_tf,
-          strides=strides,
-          padding=padding,
-          dilations=dilations)
-    grad_reference_filter_tf = gt.gradient(output_tf, filter_tf)
-    grad_reference_input_tf = gt.gradient(output_tf, input_tf)
-    # transpose to match UpStride layout                               O  I  H  W
-    grad_reference_filter_tf = tf.transpose(grad_reference_filter_tf, [2, 3, 0, 1])
-    grad_reference_input_tf = tf.transpose(grad_reference_input_tf, [0, 3, 1, 2])
+    output_upstride, dinputs_upstride, dweights_upstride, dbias_upstride = get_output_and_gradients(model_up, model_up.depthwise_kernel, inputs)
+    output_tf, dinputs_tf, dweights_tf, dbias_tf = get_output_and_gradients(model_tf, model_tf.depthwise_kernel, inputs)
 
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch([filter_upstride, input_upstride])
-      output_upstride = upstride_ops.upstride_conv2d(
-          input_upstride, filter_upstride, bias,
-          strides=strides,
-          padding=padding,
-          dilations=dilations,
-          data_format='NCHW',
-          groups=in_channels,
-          use_bias=use_bias)
-    grad_test_filter = gt.gradient(output_upstride, filter_upstride)
-    grad_test_input = gt.gradient(output_upstride, input_upstride)
+    self.assert_and_print(output_upstride, output_tf, "DepthwiseConv2D", "output")
+    self.assert_and_print(dweights_upstride, tf.transpose(dweights_tf, [2, 3, 0, 1]), "DepthwiseConv2D", "dfilter")
+    self.assert_and_print(dinputs_upstride, dinputs_tf, "DepthwiseConv2D", "dinput")
+    if use_bias:
+      self.assert_and_print(dbias_upstride, dbias_tf, "DepthwiseConv2D", "dbias")
 
-    # COMPARISONS
-    self.assert_and_print(grad_test_filter, grad_reference_filter_tf, "Conv2DBwd", "dfilter")
-    self.assert_and_print(grad_test_input, grad_reference_input_tf, "Conv2DBwd", "dinput")
-
-  def test_conv2dgrad(self):
-    self.run_conv2dgrad_test(img_size=5, filter_size=3, in_channels=4, padding='VALID')
-    self.run_conv2dgrad_test(img_size=5, filter_size=3, in_channels=4, padding='VALID', use_bias=True)
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, padding='VALID')
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, padding='VALID', use_bias=True)
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, padding='SAME')
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, padding='SAME', use_bias=True)
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, strides=[1, 2, 2, 1])
-    self.run_conv2dgrad_test(img_size=9, filter_size=3, in_channels=3, strides=[1, 2, 2, 1], use_bias=True)
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, padding='VALID')
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, padding='VALID', use_bias=True)
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, padding='SAME')
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, padding='SAME', use_bias=True)
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, strides=[1, 2, 2, 1])
-    self.run_conv2dgrad_test(img_size=32, filter_size=4, in_channels=3, strides=[1, 2, 2, 1], use_bias=True)
+  def test_dw_conv2d(self):
+    self.run_dw_conv2d_test(img_size=5, filter_size=3, channels=4, padding='VALID', batch_size=3)
+    self.run_dw_conv2d_test(img_size=5, filter_size=3, channels=4, padding='VALID', batch_size=4, use_bias=True)
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, padding='VALID', batch_size=5)
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, padding='VALID', use_bias=True)
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, padding='SAME')
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, padding='SAME', use_bias=True)
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, strides=[2, 2])
+    self.run_dw_conv2d_test(img_size=9, filter_size=3, channels=3, strides=[2, 2], use_bias=True)
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, padding='VALID')
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, padding='VALID', use_bias=True)
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, padding='SAME')
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, padding='SAME', use_bias=True)
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2])
+    self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2], use_bias=True)
 
 class TestDense(TestCase):
   def get_inputs_and_filters_dense(self, batch_size, in_features, out_features, dtype=tf.float32):
@@ -407,38 +323,24 @@ class TestDense(TestCase):
 
   def run_test(self, batch_size, in_features, out_features, use_bias=False, dtype=tf.float32):
     """ Runs a single dense and compares the result with TensorFlow output """
-    from . import layers
     inputs, weights, bias = self.get_inputs_and_filters_dense(batch_size, in_features, out_features, dtype)
-    # run upstride dense
-    model_upstride = layers.Dense(out_features, use_bias=use_bias)
-    model_upstride(inputs)
+    # Declare models
+    model_up = Dense(out_features, use_bias=use_bias)
+    model_tf = tf.keras.layers.Dense(out_features, use_bias=use_bias)
+
+    # Initialize weights so that they exist at the moment that they are going to be modified
+    model_up(inputs)
+    model_tf(inputs)
+
     if use_bias:
-      model_upstride.set_weights([weights, tf.expand_dims(bias, 0)])
+      model_up.set_weights([weights, tf.expand_dims(bias, 0)])
+      model_tf.set_weights([weights, bias])
     else:
-      model_upstride.set_weights([weights])
+      model_up.set_weights([weights])
+      model_tf.set_weights([weights])
 
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch([model_upstride.kernel, inputs])
-      if use_bias:
-        gt.watch(model_upstride.bias)
-      output_upstride = model_upstride(inputs)
-      if use_bias:
-        dinputs_upstride, dweights_upstride, dbias_upstride = gt.gradient(output_upstride, [inputs, model_upstride.kernel, model_upstride.bias])
-      else:
-        dinputs_upstride, dweights_upstride = gt.gradient(output_upstride, [inputs, model_upstride.kernel])
-
-    # run TF dense
-    model_tf = tf.keras.layers.Dense(out_features, use_bias=False)
-    output_tf = model_tf(inputs)
-    model_tf.set_weights([weights])
-    with tf.GradientTape(persistent=True) as gt:
-      gt.watch([model_tf.kernel, inputs])
-      output_tf = model_tf(inputs)
-      if use_bias:
-        gt.watch(bias)
-        output_tf = tf.nn.bias_add(output_tf, bias)
-        dbias_tf = gt.gradient(output_tf, bias)
-      dinputs_tf, dweights_tf = gt.gradient(output_tf, [inputs, model_tf.kernel])
+    output_upstride, dinputs_upstride, dweights_upstride, dbias_upstride = get_output_and_gradients(model_up, model_up.kernel, inputs)
+    output_tf, dinputs_tf, dweights_tf, dbias_tf = get_output_and_gradients(model_tf, model_tf.kernel, inputs)
 
     # compare the outputs
     self.assert_and_print(output_upstride, output_tf, "DenseFwd")
