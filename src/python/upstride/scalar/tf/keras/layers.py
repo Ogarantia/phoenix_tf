@@ -10,7 +10,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 
 from upstride.generic_convolution import GenericConv2D
 from upstride.generic_dense import GenericDense
-from upstride.type_generic.tf.keras.layers import SCALAR
+from upstride.type_generic.tf.keras.layers import SCALAR, upstride_type_to_dimension
 
 from .... import generic_layers
 from ....generic_layers import *
@@ -149,7 +149,7 @@ class DepthwiseConv2D(Conv2D):
         constraint=self.depthwise_constraint)
 
     if self.use_bias:
-      self.bias = self.add_weight(shape=(input_dim * self.depth_multiplier,),
+      self.bias = self.add_weight(shape=(upstride_type_to_dimension(self.upstride_datatype), input_dim * self.depth_multiplier,),
                                   initializer=self.bias_initializer,
                                   name='bias',
                                   regularizer=self.bias_regularizer,
@@ -170,7 +170,9 @@ class DepthwiseConv2D(Conv2D):
         padding=self.padding.upper(),
         dilations=self.dilation_rate,
         data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
-        groups=self.groups)
+        name=self.name,
+        groups=self.groups,
+        use_bias=self.use_bias)
 
     if self.activation is not None:
       return self.activation(outputs)
