@@ -6,7 +6,7 @@ import jenkins.model.Jenkins
 
 pipeline {
     agent {
-        label 'azure-gpu'
+        label 'scaleway-gpu'
     }
     environment {
         SLACK_WEBHOOK = 'https://hooks.slack.com/services/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'
@@ -76,11 +76,19 @@ pipeline {
                 timeout(time: 300, unit: "SECONDS")
             }
             steps {
+                // run tests on GPU
+                script {
+                    docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
+                        docker.image(env.BUILD_DEV).inside(){
+                            sh("""python3 test.py""")
+                        }
+                    }
+                }
+                // run tests on CPU
                 script {
                     docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
                         docker.image(env.BUILD_DEV).inside("--gpus all"){
                             sh("""CUDA_VISIBLE_DEVICES= python3 test.py""")
-                                // fixme: enable execution on GPU without FP16 support
                         }
                     }
                 }
@@ -139,7 +147,7 @@ pipeline {
             info("Pipeline failed. :face_with_head_bandage:")
         }
         always {
-            info("Logs here: ${BUILD_URL}consoleText")
+            info("Logs here: ${BUILD_URL}console")
             slack()
         }
     }
