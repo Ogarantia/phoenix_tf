@@ -8,7 +8,7 @@ import tensorflow as tf
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../src/python")
 import upstride as up
 from upstride.type_generic.custom_op import upstride_ops
-import upstride.scalar.tf.keras.layers as uplayers
+import upstride.type0.tf.keras.layers as uplayers
 import tensorflow.keras.layers as tflayers
 
 # padding = 'SAME'

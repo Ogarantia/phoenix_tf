@@ -10,7 +10,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 
 from upstride.generic_convolution import GenericConv2D
 from upstride.generic_dense import GenericDense
-from upstride.type_generic.tf.keras.layers import SCALAR, upstride_type_to_dimension
+from upstride.type_generic.tf.keras.layers import TYPE0, upstride_type_to_dimension
 
 from .... import generic_layers
 from ....generic_layers import *
@@ -86,7 +86,7 @@ class Conv2D(GenericConv2D):
                      bias_constraint,
                      require_input_grad,
                      **kwargs)
-    self.upstride_datatype = SCALAR
+    self.upstride_datatype = TYPE0
 
 
 class DepthwiseConv2D(Conv2D):
@@ -207,4 +207,4 @@ class Dense(GenericDense):
                       require_input_grad,
                       **kwargs)
                       
-    self.upstride_datatype = SCALAR
+    self.upstride_datatype = TYPE0

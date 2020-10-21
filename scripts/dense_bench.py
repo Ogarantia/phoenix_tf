@@ -6,7 +6,7 @@ from upstride.type_generic.custom_op import upstride_ops
 import tensorflow as tf
 import numpy
 import time
-import upstride.scalar.tf.keras.layers as uplayers
+import upstride.type0.tf.keras.layers as uplayers
 import argparse
 
 context = {

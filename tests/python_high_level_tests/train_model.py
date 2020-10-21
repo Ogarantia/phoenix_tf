@@ -18,9 +18,9 @@ def framework_mapping(upstride_bool, datatype_int):
   """ Converts a pair of upstride_bool and datatype_int into a framework.
   """
   print('*')
-  if datatype_int == 0 and upstride_bool: # scalar upstride
-    import upstride.scalar.tf.keras.layers as up
-  elif datatype_int == 0 and not upstride_bool: # scalar tensorflow
+  if datatype_int == 0 and upstride_bool: # type0 upstride
+    import upstride.type0.tf.keras.layers as up
+  elif datatype_int == 0 and not upstride_bool: # type0 tensorflow
     framework = tf.keras.layers
   elif datatype_int == 2: # type2 upstride (phoenix OR python)
     import upstride.type2.tf.keras.layers as up

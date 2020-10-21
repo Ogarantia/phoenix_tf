@@ -680,8 +680,8 @@ def generate_classification_api_train_results():
           factor = 4 if engine["dtype"] == 2 else 1
           dtype = engine["dtype"]
           if "-upstride" in engine["name"]:
-            type_name = "real" if dtype == 0 else "type2"
-            engine_name = "upstride_"+type_name
+            type_name = "type" + str(dtype)
+            engine_name = "upstride_" + type_name
           else:
             engine_name = engine["name"]
 
@@ -864,7 +864,9 @@ def execute_popen_in_log(logfile_w_path, cmd, cwd, env=""):
       if not line: break
       if line:
         if line[-1] != '\r':
-          logfile.write(line)     # print in log file
+          # Throws away all the lines ending by '\r', namely the lines
+          # displaying the evolution of a given epoch 
+          logfile.write(line.split('\r')[-1]) # print in log file
         sys.stdout.write(line)  # print in standard output
 
     # Catch if an error was raised
