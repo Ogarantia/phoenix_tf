@@ -44,7 +44,7 @@ else:
 
 # Add all python files recursively to "Extension"
 # Exclude all __init__.py and test*.py
-py_files = [f for f in glob.glob('src/python/upstride/**/*.py',recursive=True) if not ("__" in f or "test" in f)]
+py_files = [f for f in glob.glob('upstride/**/*.py',recursive=True) if not ("__" in f or "test" in f)]
 ext_names = [x.split('.')[0].replace('/','.') for x in py_files]
 ext_modules_list = list()
 for name, pyfile in zip(ext_names, py_files):
@@ -102,7 +102,7 @@ class CleanCommand(Command):
     def finalize_options(self):
         pass
     def run(self):
-        os.system('rm -vrf ./*.egg-info ./build/cython')
+        os.system('rm -vrf ./*.egg-info ./build')
 
 
 setup(
@@ -116,7 +116,7 @@ setup(
     url="https://upstride.io",
     include_package_data=True,
     packages=['upstride'],
-    package_dir={'upstride': 'src/python/upstride/type_generic'},
+    package_dir={'upstride': 'upstride/type_generic'},
     package_data={'upstride': ['libupstride.so', 'libdnnl.so.1']},
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -127,7 +127,7 @@ setup(
         'Topic :: Software Development :: Libraries',
     ],
     # language_level=3 for python3 
-    ext_modules= cythonize(ext_modules_list, language_level=3, nthreads=4, build_dir="build/cython"),
+    ext_modules= cythonize(ext_modules_list, language_level=3, nthreads=4, build_dir="build"),
     cmdclass = {
         'build_py': build_py,
         'clean': CleanCommand

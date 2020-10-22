@@ -34,7 +34,7 @@ engine:
 
 # building engine and create a wheel file; it will only remain to pip install this wheel file to install it
 wheel: engine install
-	@$(PYTHON) src/python/cythonizer.py bdist_wheel --dist-dir build clean --arch $(ARCH)
+	@cd src/python && $(PYTHON) cythonizer.py bdist_wheel --dist-dir ../../build clean --arch $(ARCH)
 
 build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
 	@cd build && make VERBOSE=$(if $(VERBOSE),1,0) -j`nproc`
