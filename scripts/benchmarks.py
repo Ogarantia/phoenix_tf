@@ -118,10 +118,12 @@ context = {
   "classification_arch_train": [], # List all architecture to test with classification-api for training
   "orig_pythonpath": "",  # Save the PYTHONPATH env variable before we run this script
   "multi-gpu": False,
+  "mixed-precision": True,
   ## ENV CONTEXT
   "DEBUG": True,      # Allow to print all debug messages
   "VERBOSE": 5,       # Determine the verbose level; 0 completely silent, 1 only error messages, 2 add warning messages, 3 add info messages, 4 add debug messages
-  "batch_size_init":0 # If zero, the default initial batch size is kept. Otherwise, it is overwritten.
+  "batch_size_init":0,# If zero, the default initial batch size is kept. Otherwise, it is overwritten.
+  "nb_epochs":0 # If zero, the default initial batch size is kept. Otherwise, it is overwritten.
 }
 
 SUCCESS = 0
@@ -494,7 +496,7 @@ def generate_classification_api_infer_results():
                                     f'{repository_path}/inference_benchmark.py',
                                     f'--yaml_config={repository_path}/config.yml']))
   else:
-    batch_size = 128
+    batch_size_default = 128 if context["batch_size_init"] == 0 else context["batch_size_init"]
     docker_img = 'local'
 
     engine_configs = create_engine_configs(context)
@@ -504,7 +506,7 @@ def generate_classification_api_infer_results():
     # If the error came from something else we continue to the next engine/model
     # If success add all information for the user into the readme file at the root of resdir
     for model in context["classification_arch_infer"]:
-      batch_size_r = batch_size if context["batch_size_init"] == 0 else context["batch_size_init"]
+      batch_size_r = batch_size_default if context["batch_size_init"] == 0 else context["batch_size_init"]
 
       # create path for results
       results_dir = os.path.join(context["resdir"], 'classification-infer', model)
@@ -594,6 +596,7 @@ def generate_classification_api_train_results():
   else:
     train_configurations = []
     if "MobileNetV2Cifar10NCHW" in context["classification_arch_train"]:
+      # Parameters based on https://upstride.atlassian.net/wiki/spaces/benchmarks/pages/593362945/Mobilenet+experiment#Cifar-10
       train_configurations.append ( # MobileNetV2Cifar10NCHW - cifar10
       {
         "model_name": "MobileNetV2Cifar10NCHW",
@@ -633,40 +636,45 @@ def generate_classification_api_train_results():
       #     "optimizer_lr_decay_strat_strategy": "lr_reduce_on_plateau",
       #     "optimizer_lr_decay_strat_decay_rate": 0.3
       # })
+      # Parameters based on https://upstride.atlassian.net/wiki/spaces/benchmarks/pages/593362945/Mobilenet+experiment#Imagenette
       train_configurations.append ({ # MobileNetV2NCHW - imagenette/full-size-v2
         "model_name": "MobileNetV2NCHW",
         "data_name": "imagenette/full-size-v2",
         "num_class": 10,
-        "batch_size": 4,
-        "early_stopping": 40
+        "num_epochs": 200,
+        "batch_size": 64,
+        "early_stopping": 40,
+        "input_size_H": 224, "input_size_W": 224, "input_size_C": 3,
+        "data_train_list": ['RandomCropThenResize', 'Normalize', 'RandomHorizontalFlip', 'Cutout', 'ColorJitter', 'Translate'],
+        "data_val_list": ['Normalize', 'CentralCrop'],
+        "data_val_split_id": "validation",
+        "data_train_split_id": "train",
+        "data_trans_width_shift_range": 0.2,
+        "data_trans_height_shift_range": 0.2,
+        "data_RandomCrop_size_H": 224, "data_RandomCrop_size_W": 224, "data_RandomCrop_size_C": 3,
+        "data_centralCrop_size": 224,
+        "data_cutout_length": 16,
+        "optimizer_name": "sgd_nesterov",
+        "optimizer_lr": 0.1,
+        "optimizer_lr_decay_strat_patience": 20,
+        "optimizer_lr_decay_strat_strategy": "cosine_decay",
+        "optimizer_lr_decay_strat_decay_rate": 0.1
       })
-      # Prepare stuff for imagenet but not tested and validated yet
-      # train_configurations.append (
-      # {
-      #     "model_name": "MobileNetV2NCHW",
-      #     "data_name": "imagenet",
-      #     "num_class": 1000,
-      #     "input_size_H": 224, "input_size_W": 224, "input_size_C": 3,
-      #     "data_train_list": ['ResizeThenRandomCrop','RandomHorizontalFlip','Translate','Cutout','Normalize'],
-      #     "data_val_list": ['ResizeThenRandomCrop','Normalize'],
-      #     "data_val_split_id": "validation",
-      #     "data_trans_width_shift_range": 0.25,
-      #     "data_trans_height_shift_range": 0.25,
-      #     "data_cutout_length": 4,
-      #     "early_stopping": 40,
-      #     "optimizer_lr": 0.1,
-      #     "optimizer_lr_decay_strat_patience": 20,
-      #     "optimizer_lr_decay_strat_strategy": "lr_reduce_on_plateau",
-      #     "optimizer_lr_decay_strat_decay_rate": 0.3
-      # })
-    
+
     # Create a list of engines assosiated with their possible value for dtype
     engine_configs = create_engine_configs(context)
-    batch_size = 128
-    nb_epochs=1000
+    batch_size_default = 128 if context["batch_size_init"] == 0 else context["batch_size_init"]
+    nb_epochs_default  = 200 if context["nb_epochs"] == 0 else context["nb_epochs"]
 
     for train_config in train_configurations:
-      batch_size_r = batch_size if context["batch_size_init"] == 0 else context["batch_size_init"]
+      # Prioritization : train_config; then context; finally default batch_size
+      if "batch_size" in train_config:
+          batch_size_r = train_config["batch_size"]
+      elif context["batch_size_init"] != 0:
+          batch_size_r = context["batch_size_init"]
+      else:
+          batch_size_r = batch_size_default
+
       # create path for results
       results_dir = os.path.join(context["resdir"], 'classification-train', train_config["model_name"])
       if not os.path.exists(results_dir):
@@ -677,8 +685,8 @@ def generate_classification_api_train_results():
       look_for_batchsize = True
       while look_for_batchsize:
         for engine in engine_configs:
-          factor = 4 if engine["dtype"] == 2 else 1
           dtype = engine["dtype"]
+          factor = 4 if dtype == 2 else 1
           if "-upstride" in engine["name"]:
             type_name = "type" + str(dtype)
             engine_name = "upstride_" + type_name
@@ -694,39 +702,47 @@ def generate_classification_api_train_results():
                         '--model_name', train_config["model_name"],
                         '--framework', engine_name,
                         '--factor', factor,
-                        '--num_epochs', nb_epochs,
+                        '--num_epochs', nb_epochs_default if not "num_epochs" in train_config else train_config["num_epochs"],
                         '--checkpoint_dir', os.path.join(results_dir,"checkpoint/"),
                         '--log_dir', results_dir,
                         '--dataloader.batch_size', batch_size_r,
                         '--dataloader.name', train_config["data_name"],
                         '--early_stopping', train_config["early_stopping"]
                       ]
+
           # All of these parameters don't obviously appear when calling classification-api/train.py
           # So we have to check for each parameter
-          if train_config["data_name"] != "imagenette/full-size-v2":
-            if train_config["input_size_H"]:
-              args_list.extend(['--input_size', train_config["input_size_H"], train_config["input_size_W"], train_config["input_size_C"]])
-            if train_config["data_train_list"]:
-              args_list.extend(['--dataloader.train_list', *train_config["data_train_list"]])
-            if train_config["data_val_list"]:
-              args_list.extend(['--dataloader.val_list', *train_config["data_val_list"]])
-            if train_config["data_val_split_id"]:
-              args_list.extend(['--dataloader.val_split_id', train_config["data_val_split_id"]])
-            if train_config["data_trans_width_shift_range"]:
-              args_list.extend(['--dataloader.Translate.width_shift_range', train_config["data_trans_width_shift_range"]])
-            if train_config["data_trans_height_shift_range"]:
-              args_list.extend(['--dataloader.Translate.height_shift_range', train_config["data_trans_height_shift_range"]])
-            if train_config["data_cutout_length"]:
-              args_list.extend(['--dataloader.Cutout.length', train_config["data_cutout_length"]])
-            if train_config["optimizer_lr"]:
-              args_list.extend(['--optimizer.lr', train_config["optimizer_lr"]])
-            if train_config["optimizer_lr_decay_strat_patience"]:
-              args_list.extend(['--optimizer.lr_decay_strategy.lr_params.patience', train_config["optimizer_lr_decay_strat_patience"]])
-            if train_config["optimizer_lr_decay_strat_strategy"]:
-              args_list.extend(['--optimizer.lr_decay_strategy.lr_params.strategy', train_config["optimizer_lr_decay_strat_strategy"]])
-            if train_config["optimizer_lr_decay_strat_decay_rate"]:
-              args_list.extend(['--optimizer.lr_decay_strategy.lr_params.decay_rate', train_config["optimizer_lr_decay_strat_decay_rate"]])
-          if train_config["num_class"]:
+          if 'input_size_H' in train_config:
+            args_list.extend(['--input_size', train_config["input_size_H"], train_config["input_size_W"], train_config["input_size_C"]])
+          if "data_train_list" in train_config:
+            args_list.extend(['--dataloader.train_list', *train_config["data_train_list"]])
+          if "data_val_list" in train_config:
+            args_list.extend(['--dataloader.val_list', *train_config["data_val_list"]])
+          if "data_val_split_id" in train_config:
+            args_list.extend(['--dataloader.val_split_id', train_config["data_val_split_id"]])
+          if "data_train_split_id" in train_config:
+            args_list.extend(['--dataloader.train_split_id', train_config["data_train_split_id"]])
+          if "data_trans_width_shift_range" in train_config:
+            args_list.extend(['--dataloader.Translate.width_shift_range', train_config["data_trans_width_shift_range"]])
+          if "data_trans_height_shift_range" in train_config:
+            args_list.extend(['--dataloader.Translate.height_shift_range', train_config["data_trans_height_shift_range"]])
+          if "data_RandomCrop_size_H" in train_config:
+            args_list.extend(['--dataloader.RandomCrop.size', train_config["data_RandomCrop_size_H"], train_config["data_RandomCrop_size_W"], train_config["data_RandomCrop_size_C"]])
+          if "data_centralCrop_size" in train_config:
+            args_list.extend(['--dataloader.CentralCrop.size', train_config["data_centralCrop_size"], train_config["data_centralCrop_size"]])
+          if "data_cutout_length" in train_config:
+            args_list.extend(['--dataloader.Cutout.length', train_config["data_cutout_length"]])
+          if "optimizer_name" in train_config:
+            args_list.extend(['--optimizer.name', train_config["optimizer_name"]])
+          if "optimizer_lr" in train_config:
+            args_list.extend(['--optimizer.lr', train_config["optimizer_lr"]])
+          if "optimizer_lr_decay_strat_patience" in train_config:
+            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.patience', train_config["optimizer_lr_decay_strat_patience"]])
+          if "optimizer_lr_decay_strat_strategy" in train_config:
+            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.strategy', train_config["optimizer_lr_decay_strat_strategy"]])
+          if "optimizer_lr_decay_strat_decay_rate" in train_config:
+            args_list.extend(['--optimizer.lr_decay_strategy.lr_params.decay_rate', train_config["optimizer_lr_decay_strat_decay_rate"]])
+          if "num_class" in train_config:
             args_list.extend(['--num_classes', train_config["num_class"]])
 
           # Both cannot co-exist
@@ -734,6 +750,8 @@ def generate_classification_api_train_results():
             args_list.append('--configuration.mirrored')
           else:
             args_list.extend(['--configuration.profiler', 'True'])
+          if context["mixed-precision"]:
+            args_list.extend(['--configuration.with_mixed_precision', 'True'])
           
           # Print cmd line used
           print_dbg(f"PYTHONPATH={myenv['PYTHONPATH']} {' '.join(list(map(str,args_list)))}")
@@ -912,7 +930,8 @@ def fill_context(config_file="", args=None,
                resdir="", 
                pxpath="", pypath="", 
                lib_path="",
-               multigpu=False, 
+               multigpu=False,
+               mixedprec=False,
                verbose=4):
   """Fill context in order to have all information needed to run all other functions
 
@@ -926,6 +945,7 @@ def fill_context(config_file="", args=None,
       pypath (str, optional): PYTHONPATH to the py-engine. Defaults to "".
       lib_path (str, optional): Where to find .so. Defaults to "".
       multigpu (bool, optional): Enable multi-gpus, only available for training. Defaults to False.
+      mixedprec (bool, optional): Enable mixed-precision, for training. Defaults to False.
       verbose (int, optional): Verbose level of this script, from 0 to 4. Defaults to 4.
   """
   # Save original PYTHONPATH env variable
@@ -955,6 +975,7 @@ def fill_context(config_file="", args=None,
                                 "pythonpath":""})
     context["lib_path"] = lib_path if lib_path != "" else os.path.join(get_project_path(), "build/libs")
     context["multi-gpu"] = multigpu
+    context["mixed-precision"] = mixedprec
     # Where to put results
     context["resdir"] = "/tmp/res-phoenix-" + get_git_revisions_hash()[:6] if resdir == "" else resdir
     # Should we clear all previous results by default ?
@@ -964,6 +985,11 @@ def fill_context(config_file="", args=None,
     context["VERBOSE"] = verbose
     if not context["classification_arch_infer"]:
       context["classification_arch_infer"] = ['AlexNetNCHW','MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
+    if args:
+      if  "batch_size_init" in args:
+        context["batch_size_init"] = args.batch_size
+      if "nb_epochs" in args:
+        context["nb_epochs"] = args.nb_epochs
   else:
     # TODO THIS PART HAS NOT BEEN TESTED, SO VERIFY IT WORKS AND THAT WE HAVE ALL INFORMATION NEEDED
     # User assume that all fileds are correct
@@ -999,10 +1025,12 @@ def fill_context(config_file="", args=None,
     context["classification_arch_train"] = config["classification_arch_train"] if "classification_arch_train" in config else ['MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
     # System
     if 'multigpu'    in config: context["multi-gpu"] = config['multigpu']
+    if 'mixedprec'   in config: context["mixed-precision"] = config['mixedprec']
+    if 'batch_size'  in config: context["batch_size_init"] = config['batch_size']
+    if 'nb_epochs'   in config: context["nb_epochs"] = config['nb_epochs']
     # CONTEXT
     if 'VERBOSE'     in config: context["VERBOSE"] = config['VERBOSE']
     if 'DEBUG'       in config: context["DEBUG"] = config['DEBUG']
-  context["batch_size_init"] = args.batch_size_init
 
 
 def setup_env():
@@ -1029,7 +1057,7 @@ def print_generic_info():
   print("Phoenix: ",context["px-upstride"])
   print("Python : ",context["py-upstride"])
   print("-----------------------")
-  print("Phoenix lib information: ")
+  print("Phoenix lib information:")
   print("Branch: ", get_git_branch_name())
   print("Git current hash: ", get_git_revisions_hash())
   print("Libraries location: ", context["lib_path"])
@@ -1045,6 +1073,14 @@ def print_generic_info():
       print("Multi-GPU: OFF")
   else:
     print("Device: CPU")
+  print("Proc: ", platform.processor())
+  print("-----------------------")
+  print("Running context information:")
+  print("Multi-GPU: ","enabled" if context["multi-gpu"] else "disabled")
+  print("Mixed-precision: ","enabled" if context["mixed-precision"] else "disabled")
+  print("batch_size_init: ", context["batch_size_init"])
+  print("number of epoch: ", context["nb_epochs"])
+  print("Verbose level: ", context["VERBOSE"])
   print("Proc: ", platform.processor())
   print("=======================")
 
@@ -1128,6 +1164,9 @@ def create_config_file_template():
   context["classification_arch_train"] = ['MobileNetV2NCHW','MobileNetV2Cifar10NCHW']
   config["mem_use_limit"] = 10
   config['multigpu'] = False
+  config['mixedprec'] = False
+  config['batch_size'] = 128
+  config['nb_epochs'] = 200
   config['VERBOSE'] = 0
   config['DEBUG'] = False
 
@@ -1148,14 +1187,16 @@ def main():
   parser.add_argument('--interactive',    "-i",    action='store_true',           help='overwrite all other command except project name.')
   parser.add_argument('--lib_path',       "-lp",   type=str, default="",          help='Used to indicate where is libupstride.so')
   parser.add_argument('--multigpu',       "-mg",   action='store_true',           help='Enable multi-GPU or not')
+  parser.add_argument('--mixed_precision',"-mp",   action='store_true',           help='Enable mixed-precision or not')
   parser.add_argument('--project_name',   "-pn",   type=str, default="phoenix_tf",help='Default: phoenix_tf')
   parser.add_argument('--result_dir',     "-rd",   type=str, default="",          help='Default: \'\'')
   parser.add_argument('--px_engine_path', "-pxep", type=str, default="",          help='Used to indicate where is located the Phoenix engine')
   parser.add_argument('--py_engine_path', "-pyep", type=str, default="",          help='Used to indicate where is located the python engine')
   parser.add_argument('--update',         "-u",    action='store_true',           help='Update and compile engine')
   parser.add_argument('--verbose',        "-v",    type=int, default=5,           help='Update and compile engine')
-  parser.add_argument('--batch_size_init',"-b",    type=int, default=0,           help='First batch size that the script is going to try. '
+  parser.add_argument('--batch_size',     "-bs",   type=int, default=0,           help='First batch size that the script is going to try. '
                                                                                        'If no value is passed, its default value on each use case is applied.')
+  parser.add_argument('--nb_epochs',      "-ep",   type=int, default=0,           help='Default number of epoch to run. ')
   args = parser.parse_args()
 
   # Either run following steps
@@ -1213,10 +1254,10 @@ def main():
       txt = input("Run classification-api (training) ? y/N ")
       classification_train = True if (txt == "y") else False
       if classification_train:
-        txt = input("[classification-api][train] on MobileNetV2Cifar10 ? y/N ")
+        txt = input("[classification-api][train] on MobileNetV2 - Cifar10 ? y/N ")
         if txt == 'y':
           context["classification_arch_train"].append('MobileNetV2Cifar10NCHW')
-        txt = input("[classification-api][train] on MobileNetV2 ? y/N ")
+        txt = input("[classification-api][train] on MobileNetV2 - imagenette ? y/N ")
         if txt == 'y':
           context["classification_arch_train"].append('MobileNetV2NCHW')
 
@@ -1228,6 +1269,7 @@ def main():
                resdir=args.result_dir,
                lib_path=args.lib_path,
                multigpu=True if args.multigpu else False,
+               mixedprec=True if args.mixed_precision else False,
                verbose=args.verbose)
 
   set_gpu_use(get_available_gpus())
