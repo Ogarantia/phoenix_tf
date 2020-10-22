@@ -79,7 +79,8 @@ def benchmark_engine(filter, inputs, bias, use_bias, engine):
   times = [0] * num_rep
   filters = filter.shape[0]
   kernel_size = filter.shape[2:]
-  if 'phoenix_tf' in engine.__file__:
+  # phoenix_tf when in dev build; cpython when in prod build
+  if 'phoenix_tf' in engine.__file__ or 'cpython' in engine.__file__:
     data_format = 'channels_first'
     bias = tf.expand_dims(bias, axis=0)
   elif 'tensorflow' in engine.__file__:
