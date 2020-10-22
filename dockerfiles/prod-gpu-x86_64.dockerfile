@@ -5,17 +5,16 @@ FROM tensorflow/tensorflow:${TF_VERSION}-gpu
 COPY dockerfiles/bash.bashrc /root/.bash_aliases
 
 # install the python package in the docker
-COPY build/ /opt/upstride
-RUN export IMPORTLIBPATH=`python3 -c "import importlib; print(importlib.__path__[0])"`
-RUN cd /opt/upstride && \
-    ls libs/libupstride.so && \
-    ls core/thirdparty/onednn/src/libdnnl.so.1 && \
-    ln -s /opt/upstride/libs/libupstride.so $IMPORTLIBPATH/libupstride.so && \
-    ln -s /opt/upstride/core/thirdparty/onednn/src/libdnnl.so.1 $IMPORTLIBPATH/libdnnl.so.1 && \
-    ls $IMPORTLIBPATH/libupstride.so && \
-    ls $IMPORTLIBPATH/libdnnl.so.1 && \
-    pip install upstride-*.whl && \
-    cd / && rm -r /opt/upstride
-RUN unset IMPORTLIBPATH
+COPY build/upstride-*.whl /opt/
+RUN export IMPORTLIBPATH=`python3 -c "import importlib; print(importlib.__path__[0])"` && \
+    pip install /opt/upstride-*.whl && \
+    export UPSTRIDELIBPATH=`python3 -c "import upstride; print(upstride.__path__._path[0])"` && \
+    ls $UPSTRIDELIBPATH/libupstride.so && \
+    ls $UPSTRIDELIBPATH/libdnnl.so.1 && \
+    ln -s $UPSTRIDELIBPATH/libupstride.so $IMPORTLIBPATH/libupstride.so && \
+    ln -s $UPSTRIDELIBPATH/libdnnl.so.1 $IMPORTLIBPATH/libdnnl.so.1 && \
+    rm /opt/upstride-*.whl && \
+    unset IMPORTLIBPATH && \
+    unset UPSTRIDELIBPATH
 
 RUN python3 -m pip install packaging
