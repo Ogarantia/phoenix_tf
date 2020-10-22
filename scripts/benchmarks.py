@@ -32,7 +32,7 @@ get_available_gpus:
 get_project_path:
   Get path to current project. By default look for the name "phoenix_tf"
 get_lib_path:
-  Get the path to _upstride.so
+  Get the path to libupstride.so
 pretty_print:
   Protect your eyes from bleeding reading ugly messages
 fill_context:
@@ -81,8 +81,8 @@ update_engine:
 ### Run example
 # Run interactive mode that gonna ask to you to fill all information about what you want to run
 python3 benchmarks.py -i
-# Run benchmarks on the latest commit of the master branch, distclean and compile, then run all bench using the _upstride.so of the project
-python3 benchamrks.py --branch=master --update=True --gen_all_res --lib_path=/path/to/_upstride.so
+# Run benchmarks on the latest commit of the master branch, distclean and compile, then run all bench using the libupstride.so of the project
+python3 benchamrks.py --branch=master --update=True --gen_all_res --lib_path=/path/to/libupstride.so
 # Generate all results possible using default information we have
 python3 benchamrks.py -gar
 """
@@ -106,7 +106,7 @@ context = {
   "device": "GPU",    # On which device you would like to compile/execture the engine
   "commit": "master", # Branch, tag or commit's hash
   "resdir": ".",      # Set path where you would like to push your results.
-  "lib_path": [],     # path to the _upstride.so
+  "lib_path": [],     # path to the libupstride.so
   "engines": [],      # engines to compare
   "tensorflow": "",   # Just for consistency
   "py-upstride": "",  # Path to the python engine (i.e. upstride_python)
@@ -823,12 +823,11 @@ def get_compilation_flags():
       Not optimal and force us to compile with gcc :/
       String is not well cut yet, it just to have the string; maybe one day we should improve this function
       TODO find a better way to extract this operation, try with readelf for example as follow (this line is not working perfectly)
-  # logtxt = subprocess.Popen(['readelf','-wi', get_lib_path(), '| grep DW_AT_producer'], 
-  #                             cwd=os.path.join(get_project_path(),'scripts'), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  # logtxt = subprocess.Popen(['readelf','-wi', get_lib_path(), '| grep DW_AT_producer | head -n 1'],
+  #                             cwd=os.path.join(get_project_path(),'scripts'), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   """
-  logtxt = subprocess.Popen(['strings', '-a', os.path.join(get_lib_path(), "_upstride.so")],
-                            cwd=os.path.join(get_project_path(), 'scripts'), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-  return [line.decode('utf-8') for line in logtxt.stdout if line.decode('utf-8').find("GNU GIMPLE") != -1]
+  logtxt = subprocess.Popen(['strings', '-a', os.path.join(get_lib_path(), "libupstride.so")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  return [line.decode('utf-8') for line in logtxt.stdout if line.decode('utf-8').find("GNU GIMPLE") != -1 or line.decode('utf-8').find("GNU C++11") != -1]
 
 
 ########################################
@@ -954,7 +953,7 @@ def fill_context(config_file="", args=None,
     context["engines"].append({"name": "tensorflow",
                                 "dtype":[0],
                                 "pythonpath":""})
-    context["lib_path"] = ""
+    context["lib_path"] = lib_path if lib_path != "" else os.path.join(get_project_path(), "build/libs")
     context["multi-gpu"] = multigpu
     # Where to put results
     context["resdir"] = "/tmp/res-phoenix-" + get_git_revisions_hash()[:6] if resdir == "" else resdir
@@ -1147,7 +1146,7 @@ def main():
   parser.add_argument('--config-file',    "-cf",   type=str,  default="",         help='overwrite all other command except project name.')
   parser.add_argument('--gen_all_res',    "-gar",  action='store_true',           help='Run all bench')
   parser.add_argument('--interactive',    "-i",    action='store_true',           help='overwrite all other command except project name.')
-  parser.add_argument('--lib_path',       "-lp",   type=str, default="",          help='Used to indicate where is _upstride.so')
+  parser.add_argument('--lib_path',       "-lp",   type=str, default="",          help='Used to indicate where is libupstride.so')
   parser.add_argument('--multigpu',       "-mg",   action='store_true',           help='Enable multi-GPU or not')
   parser.add_argument('--project_name',   "-pn",   type=str, default="phoenix_tf",help='Default: phoenix_tf')
   parser.add_argument('--result_dir',     "-rd",   type=str, default="",          help='Default: \'\'')

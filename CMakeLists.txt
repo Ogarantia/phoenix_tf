@@ -5,7 +5,6 @@ project(UpStride)
 
 option(WITH_ONEDNN "Enable oneDNN backend (CPU)" ON)
 option(WITH_CUDNN "Enable cuDNN backend (GPU)" OFF)
-option(ARCH "Enable optimization for specific arch (x86_64 / aarch64 / <spe_march>)" OFF)
 
 # include core
 include(${CMAKE_CURRENT_SOURCE_DIR}/core/CMakeLists.txt)
@@ -46,30 +45,8 @@ message("     Version: ${TENSORFLOW_VERSION}")
 message("     Compile flags: ${TENSORFLOW_COMPILE_FLAGS}")
 message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 
-##########################################
-# Compilation (optimization) flags setup #
-##########################################
-# Setup common optimization flags
-set(OPTIMIZATION_FLAGS "-O3 -ffast-math -funroll-loops -fipa-pta -flto -ftree-vectorize")
-
-# Setup optimization flags according to the compiler
-if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -floop-nest-optimize")
-endif()
-
-# Setup optimization flags according to processor vendor
-if (ARCH STREQUAL "OFF")
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=native")
-elseif (ARCH STREQUAL "x86_64")
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=skylake -mfma -mavx2")
-elseif (ARCH STREQUAL "aarch64")
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=armv8-a+crypto+simd -mcpu=cortex-a57+crypto+simd")
-else()
-  set(OPTIMIZATION_FLAGS "${OPTIMIZATION_FLAGS} -march=${ARCH}")
-endif()
-
 # Enable debug and opitmization flags
-set(COMMON_FLAGS "-fPIC ${OPTIMIZATION_FLAGS} -Wfatal-errors")
+set(COMMON_FLAGS "-fPIC ${OPTIMIZATION_FLAGS} ${VECTORIZATION_FLAGS} -Wfatal-errors")
 # C++11 is required by Tensorflow & PyTorch
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
