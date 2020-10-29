@@ -8,7 +8,7 @@ from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
 
-from upstride.generic_convolution import GenericConv2D
+from upstride.generic_convolution import GenericConv2D, GenericDepthwiseConv2D
 from upstride.generic_dense import GenericDense
 from upstride.type_generic.tf.keras.layers import TYPE0, upstride_type_to_dimension
 
@@ -49,6 +49,7 @@ class Upstride2TF(Layer):
     return x
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type0")
 class Conv2D(GenericConv2D):
   def __init__(self, filters,
                kernel_size,
@@ -89,7 +90,8 @@ class Conv2D(GenericConv2D):
     self.upstride_datatype = TYPE0
 
 
-class DepthwiseConv2D(Conv2D):
+@tf.keras.utils.register_keras_serializable("upstride_type0")
+class DepthwiseConv2D(GenericDepthwiseConv2D):
   def __init__(self,
                kernel_size,
                strides=(1, 1),
@@ -107,7 +109,6 @@ class DepthwiseConv2D(Conv2D):
                bias_constraint=None,
                **kwargs):
     super().__init__(
-        filters=None,
         kernel_size=kernel_size,
         strides=strides,
         padding=padding,
@@ -118,11 +119,7 @@ class DepthwiseConv2D(Conv2D):
         activity_regularizer=activity_regularizer,
         bias_constraint=bias_constraint,
         **kwargs)
-    self.depth_multiplier = depth_multiplier
-    self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer)
-    self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
-    self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
-    self.bias_initializer = tf.keras.initializers.get(bias_initializer)
+    self.upstride_datatype = TYPE0
 
   def build(self, input_shape):
     if len(input_shape) < 4:
@@ -180,6 +177,7 @@ class DepthwiseConv2D(Conv2D):
     return outputs
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type0")
 class Dense(GenericDense):
   def __init__(self,
                units,

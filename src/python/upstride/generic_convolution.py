@@ -7,6 +7,7 @@ import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops, nn
+from tensorflow.python.keras import constraints, initializers, regularizers
 from .type_generic.custom_op import upstride_conv2d
 from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension
 from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
@@ -144,3 +145,58 @@ class GenericConv2D(layers.Conv2D):
     if self.activation is not None:
       return self.activation(output)
     return output
+
+
+class GenericDepthwiseConv2D(GenericConv2D):
+  def __init__(self,
+               kernel_size,
+               strides=(1, 1),
+               padding='valid',
+               depth_multiplier=1,
+               data_format=None,
+               dilation_rate=(1, 1),
+               activation=None,
+               use_bias=True,
+               depthwise_initializer='glorot_uniform',
+               bias_initializer='zeros',
+               depthwise_regularizer=None,
+               bias_regularizer=None,
+               activity_regularizer=None,
+               depthwise_constraint=None,
+               bias_constraint=None,
+               **kwargs):
+    super(GenericDepthwiseConv2D, self).__init__(
+        filters=None,
+        kernel_size=kernel_size,
+        strides=strides,
+        padding=padding,
+        data_format=data_format,
+        dilation_rate=dilation_rate,
+        activation=activation,
+        use_bias=use_bias,
+        bias_regularizer=bias_regularizer,
+        activity_regularizer=activity_regularizer,
+        bias_constraint=bias_constraint,
+        **kwargs)
+    self.depth_multiplier = depth_multiplier
+    self.depthwise_initializer = depthwise_initializer
+    self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
+    self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
+    self.bias_initializer = tf.keras.initializers.get(bias_initializer)
+
+  def get_config(self):
+    """Returns the configuration of the layer as a JSON-serializable dict.
+
+    Returns:
+      A JSON-serializable Python dict.
+    """
+    config = super(GenericDepthwiseConv2D, self).get_config()
+    config.pop('filters')
+    config.pop('kernel_initializer')
+    config.pop('kernel_regularizer')
+    config.pop('kernel_constraint')
+    config['depth_multiplier'] = self.depth_multiplier
+    config['depthwise_initializer'] = initializers.serialize(self.depthwise_initializer)
+    config['depthwise_regularizer'] = regularizers.serialize(self.depthwise_regularizer)
+    config['depthwise_constraint'] = constraints.serialize(self.depthwise_constraint)
+    return config

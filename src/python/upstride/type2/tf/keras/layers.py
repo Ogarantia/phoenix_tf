@@ -7,7 +7,7 @@ from tensorflow.python.framework import load_library, tensor_shape
 from tensorflow.python.keras.engine import base_layer_utils
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.utils import conv_utils, tf_utils
-from upstride.generic_convolution import GenericConv2D
+from upstride.generic_convolution import GenericConv2D, GenericDepthwiseConv2D
 from upstride.generic_dense import GenericDense
 from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
@@ -109,6 +109,7 @@ class Upstride2TF(Layer):
       return components[0]
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class Conv2D(GenericConv2D):
   def __init__(self, filters,
                kernel_size,
@@ -149,7 +150,8 @@ class Conv2D(GenericConv2D):
     self.upstride_datatype = TYPE2
 
 
-class DepthwiseConv2D(Conv2D):
+@tf.keras.utils.register_keras_serializable("upstride_type2")
+class DepthwiseConv2D(GenericDepthwiseConv2D):
   def __init__(self,
                kernel_size,
                strides=(1, 1),
@@ -167,7 +169,6 @@ class DepthwiseConv2D(Conv2D):
                bias_constraint=None,
                **kwargs):
     super().__init__(
-        filters=None,
         kernel_size=kernel_size,
         strides=strides,
         padding=padding,
@@ -178,11 +179,7 @@ class DepthwiseConv2D(Conv2D):
         activity_regularizer=activity_regularizer,
         bias_constraint=bias_constraint,
         **kwargs)
-    self.depth_multiplier = depth_multiplier
-    self.depthwise_initializer = depthwise_initializer
-    self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
-    self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
-    self.bias_initializer = tf.keras.initializers.get(bias_initializer)
+    self.upstride_datatype = TYPE2
 
   def build(self, input_shape):
     if len(input_shape) < 4:
@@ -253,6 +250,7 @@ class DepthwiseConv2D(Conv2D):
     return outputs
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class Dense(GenericDense):
   def __init__(self,
                units,
@@ -283,6 +281,7 @@ class Dense(GenericDense):
     self.upstride_datatype = TYPE2
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class MaxNormPooling2D(Layer):
   """ Max Pooling layer for quaternions which considers the norm of quaternions to choose the quaternions
   which exhibits maximum norm within a small window of pool size.
@@ -474,6 +473,7 @@ def quaternion_bn(input_centred, v: Dict, beta, gamma: Dict, axis=-1):
   return output
 
 
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class BatchNormalizationQ(Layer):
   """
   quaternion implementation : https://github.com/gaudetcj/DeepQuaternionNetworks/blob/43b321e1701287ce9cf9af1eb16457bdd2c85175/quaternion_layers/bn.py

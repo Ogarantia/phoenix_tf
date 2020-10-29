@@ -116,7 +116,20 @@ class QInitializer(tf.keras.initializers.Initializer):
       weight.astype(dtype)
     return weight
 
+  def get_config(self):
+    """Returns the configuration of the initializer as a JSON-serializable dict.
 
+    Returns:
+      A JSON-serializable Python dict.
+    """
+    return {'shape': self.shape,
+            'fan_in': self.fan_in,
+            'fan_out': self.fan_out,
+            'criterion': self.criterion,
+            'seed': self.seed}
+
+
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class QInitializerConv(QInitializer):
   def __init__(self, kernel_size, input_dim, weight_dim, nb_filters=None,
                criterion='he', seed=None):
@@ -149,9 +162,29 @@ class QInitializerConv(QInitializer):
     fan_in, fan_out = _compute_fans(
         tuple(kernel_size) + (input_dim, nb_filters)
     )
+
+    # store arguments for serialization
+    self.kernel_size = kernel_size
+    self.input_dim = input_dim
+    self.weight_dim = weight_dim
+    self.nb_filters = nb_filters
     super(QInitializerConv, self).__init__(kernel_shape, fan_in, fan_out, criterion, seed)
 
+  def get_config(self):
+    """Returns the configuration of the initializer as a JSON-serializable dict.
 
+    Returns:
+      A JSON-serializable Python dict.
+    """
+    return {'kernel_size': self.kernel_size,
+            'input_dim': self.input_dim,
+            'weight_dim': self.weight_dim,
+            'nb_filters': self.nb_filters,
+            'criterion': self.criterion,
+            'seed': self.seed}
+
+
+@tf.keras.utils.register_keras_serializable("upstride_type2")
 class QInitializerDense(QInitializer):
   def __init__(self, shape, criterion='he', seed=None):
     """
@@ -163,6 +196,17 @@ class QInitializerDense(QInitializer):
     fan_in = shape[0]
     fan_out = shape[1]
     super(QInitializerDense, self).__init__(shape, fan_in, fan_out, criterion, seed)
+
+  def get_config(self):
+    """Returns the configuration of the initializer as a JSON-serializable dict.
+
+    Returns:
+      A JSON-serializable Python dict.
+    """
+    config = super(QInitializerDense, self).get_config()
+    config.pop('fan_in')
+    config.pop('fan_out')
+    return config
 
 
 def is_type2_init(init_type):

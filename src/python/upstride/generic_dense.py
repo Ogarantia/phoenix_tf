@@ -174,6 +174,11 @@ class GenericDense(Layer):
     return input_shape[:-1].concatenate(self.units)
 
   def get_config(self):
+    """Returns the configuration of the layer as a JSON-serializable dict.
+
+    Returns:
+      A JSON-serializable Python dict.
+    """
     config = {
         'units': self.units,
         'activation': activations.serialize(self.activation),
