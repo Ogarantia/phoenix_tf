@@ -12,7 +12,6 @@ MODELS = {'model_conv' : model_conv,
           'model_separable_conv': model_separable_conv,
           'model_dense' : model_dense}
 
-script_path = os.path.dirname(os.path.abspath(__file__))
 
 def framework_mapping(upstride_bool, datatype_int):
   """ Converts a pair of upstride_bool and datatype_int into a framework.
@@ -67,9 +66,9 @@ def main():
                            'Else, running inference only.')
   parser.add_argument('--print_model_summary', "-p", type=int, default=0,
                       help='If set to 0, does not print model summary. Otherwise, print model summary')
-  parser.add_argument('--model', "-m", type=str, default="",
+  parser.add_argument('--model', "-m", type=str, default=None,
                       help='Selects a model to test. If no model is provided, it iterates over all the available models. '
-                           'Options: , '.join(iter(MODELS.keys())))
+                           'Options: ' + ', '.join(iter(MODELS.keys())))
   args = parser.parse_args()
   framework, factor = framework_mapping(args.upstride, args.datatype)
 
@@ -78,7 +77,7 @@ def main():
   for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
 
-  # prepare CIFAR10
+  # prepare CIFAR100
   (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
   x_train, x_test = tf.cast(x_train, tf.float32) / 255.0, tf.cast(x_test, tf.float32) / 255.0
   # TODO: introduce channels_last option when running in TF on CPU
@@ -87,18 +86,8 @@ def main():
   x_test = tf.transpose(x_test, [0, 3, 1, 2])
   tf.keras.backend.set_image_data_format(dataformat)
 
-  # prepare a model
-  train_models = []
-  if args.model == "":
-    files = [f for f in os.listdir(script_path) if os.path.isfile(os.path.join(script_path, f))]
-    if not files:
-      print(f"Beware, no file ending by \"_bench.py\" found in {script_path}")
-    for f in files:
-      if f.startswith("model_"):
-        fname = os.path.splitext(f)[0]
-        train_models.append(fname)
-  else:
-    train_models.append(args.model)
+  # prepare models
+  train_models = [args.model] if args.model else MODELS.keys()
 
   for i in train_models:
     model = MODELS[i](framework, args.upstride, args.datatype, factor, dataformat, nclasses=100)

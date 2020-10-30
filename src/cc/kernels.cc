@@ -52,7 +52,7 @@ inline upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
-class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2DFunctor<Device, T> {
+class UpstrideConv2DOpKernel : public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -66,10 +66,10 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
     upstride::IntTuple dilation;
     int groups;
     bool useBias;
+    upstride::UpstrideConv2DFunctor<Device, T> *backend;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context),
-                                                                     upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>()),
                                                                      algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
@@ -94,7 +94,11 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
         upstride::getSpatialStep(stride, 1, st);
         upstride::getSpatialStep(dilation, 1, dil);
 
-        upstride::UpstrideConv2DFunctor<Device, T>::configure(algebra, dataFormat, st, dil);
+        backend = new upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, useBias);
+    }
+
+    ~UpstrideConv2DOpKernel() {
+        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -120,10 +124,10 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
             // execute the operation
             if (useBias) {
                 InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
-                (*this)(device, input, filter, &bias, output, padBefore, padAfter, groups);
+                (*backend)(device, input, filter, &bias, output, padBefore, padAfter, groups);
             }
             else {
-                (*this)(device, input, filter, nullptr, output, padBefore, padAfter, groups);
+                (*backend)(device, input, filter, nullptr, output, padBefore, padAfter, groups);
             }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
@@ -133,7 +137,7 @@ class UpstrideConv2DOpKernel : public OpKernel, private upstride::UpstrideConv2D
 
 
 template <typename Device, typename T>
-class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideConv2DGradFunctor<Device, T> {
+class UpstrideConv2DGradOpKernel : public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
@@ -142,6 +146,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
     upstride::IntTuple dilation;
     int groups;
     bool requireInputGrad;
+    upstride::UpstrideConv2DGradFunctor<Device, T>* backend;
 
    public:
     static const int
@@ -153,7 +158,6 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
     explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
-                                                                         upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>()),
                                                                          algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
@@ -177,10 +181,14 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             upstride::IntPair st, dil;
             upstride::getSpatialStep(stride, 1, st);
             upstride::getSpatialStep(dilation, 1, dil);
-            upstride::UpstrideConv2DGradFunctor<Device, T>::configure(algebra, dataFormat, st, dil, requireInputGrad);
-        } catch (std::exception& ex) {
+            backend = new upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, requireInputGrad);
+    } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
+    }
+
+    ~UpstrideConv2DGradOpKernel() {
+        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -206,7 +214,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
             OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
-            (*this)(device, input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
+            (*backend)(device, input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
@@ -215,7 +223,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel, private upstride::UpstrideCo
 
 
 template <typename Device, typename T>
-class UpstrideDenseOpKernel : public OpKernel, private upstride::UpstrideDenseFunctor<Device, T> {
+class UpstrideDenseOpKernel : public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -223,16 +231,20 @@ class UpstrideDenseOpKernel : public OpKernel, private upstride::UpstrideDenseFu
 
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     bool useBias;
+    upstride::UpstrideDenseFunctor<Device, T>* backend;
 
    public:
     explicit UpstrideDenseOpKernel(OpKernelConstruction* context) : OpKernel(context),
-                                                                    upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>()),
                                                                     algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
 
         // configure the operation backend
-        upstride::UpstrideDenseFunctor<Device, T>::configure(algebra, upstride::DataFormat::NC);
+        backend = new upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::NC, useBias);
+    }
+
+    ~UpstrideDenseOpKernel() {
+        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -253,10 +265,10 @@ class UpstrideDenseOpKernel : public OpKernel, private upstride::UpstrideDenseFu
             // execute the operation
             if (useBias) {
                 InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
-                (*this)(input, filter, &bias, output);
+                (*backend)(device, input, filter, &bias, output);
             }
             else {
-                (*this)(input, filter, nullptr, output);
+                (*backend)(device, input, filter, nullptr, output);
             }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
@@ -266,9 +278,10 @@ class UpstrideDenseOpKernel : public OpKernel, private upstride::UpstrideDenseFu
 
 
 template <typename Device, typename T>
-class UpstrideDenseGradOpKernel : public OpKernel, private upstride::UpstrideDenseGradFunctor<Device, T> {
+class UpstrideDenseGradOpKernel : public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     bool requireInputGrad;
+    upstride::UpstrideDenseGradFunctor<Device, T>* backend;
 
    public:
     static const int
@@ -280,17 +293,20 @@ class UpstrideDenseGradOpKernel : public OpKernel, private upstride::UpstrideDen
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
     explicit UpstrideDenseGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
-                                                                        upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>()),
                                                                         algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
 
         // configure the operation backend
         try {
-            upstride::UpstrideDenseGradFunctor<Device, T>::configure(algebra, upstride::DataFormat::NC, requireInputGrad);
+            backend = new upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::NC, requireInputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
+    }
+
+    ~UpstrideDenseGradOpKernel() {
+        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -309,7 +325,7 @@ class UpstrideDenseGradOpKernel : public OpKernel, private upstride::UpstrideDen
             OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
             // execute the operation
-            (*this)(input, kernel, grad, kernelGrad, inputGrad);
+            (*backend)(device, input, kernel, grad, kernelGrad, inputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
