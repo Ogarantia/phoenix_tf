@@ -138,6 +138,7 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                               self.kernel_size[0],
                               self.kernel_size[1])
 
+    self.depthwise_initializer = tf.keras.initializers.get(self.depthwise_initializer)
     self.depthwise_kernel = self.add_weight(
         shape=depthwise_kernel_shape,
         initializer=self.depthwise_initializer,
