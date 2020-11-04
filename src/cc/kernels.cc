@@ -49,10 +49,24 @@ inline upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
 }
 #endif
 
+/**
+ * @brief Base class for upstride kernels
+ */
+template<typename Device>
+class UpstrideBaseOpKernel {
+  protected:
+    UpstrideBaseOpKernel() {
+        getContextInstance<Device>().increaseKernelCounter();
+    }
+    ~UpstrideBaseOpKernel() {
+        getContextInstance<Device>().decreaseKernelCounter();
+    }
+};
+
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
-class UpstrideConv2DOpKernel : public OpKernel {
+class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -137,7 +151,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
 
 
 template <typename Device, typename T>
-class UpstrideConv2DGradOpKernel : public OpKernel {
+class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
@@ -223,7 +237,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel {
 
 
 template <typename Device, typename T>
-class UpstrideDenseOpKernel : public OpKernel {
+class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -278,7 +292,7 @@ class UpstrideDenseOpKernel : public OpKernel {
 
 
 template <typename Device, typename T>
-class UpstrideDenseGradOpKernel : public OpKernel {
+class UpstrideDenseGradOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     bool requireInputGrad;
     upstride::UpstrideDenseGradFunctor<Device, T>* backend;
