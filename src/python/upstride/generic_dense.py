@@ -168,9 +168,7 @@ class GenericDense(Layer):
     input_shape = tensor_shape.TensorShape(input_shape)
     input_shape = input_shape.with_rank_at_least(2)
     if tensor_shape.dimension_value(input_shape[-1]) is None:
-      raise ValueError(
-          'The innermost dimension of input_shape must be defined, but saw: %s'
-          % input_shape)
+      raise ValueError('The innermost dimension of input_shape must be defined, but saw: %s' % input_shape)
     return input_shape[:-1].concatenate(self.units)
 
   def get_config(self):
@@ -187,8 +185,7 @@ class GenericDense(Layer):
         'bias_initializer': initializers.serialize(self.bias_initializer),
         'kernel_regularizer': regularizers.serialize(self.kernel_regularizer),
         'bias_regularizer': regularizers.serialize(self.bias_regularizer),
-        'activity_regularizer':
-            regularizers.serialize(self.activity_regularizer),
+        'activity_regularizer': regularizers.serialize(self.activity_regularizer),
         'kernel_constraint': constraints.serialize(self.kernel_constraint),
         'bias_constraint': constraints.serialize(self.bias_constraint)
     }

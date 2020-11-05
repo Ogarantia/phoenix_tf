@@ -112,51 +112,19 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         kernel_size=kernel_size,
         strides=strides,
         padding=padding,
+        depth_multiplier=depth_multiplier,
         data_format=data_format,
         activation=activation,
         use_bias=use_bias,
+        depthwise_initializer=depthwise_initializer,
+        bias_initializer=bias_initializer,
+        depthwise_regularizer=depthwise_regularizer,
         bias_regularizer=bias_regularizer,
         activity_regularizer=activity_regularizer,
+        depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
         **kwargs)
     self.upstride_datatype = TYPE0
-
-  def build(self, input_shape):
-    if len(input_shape) < 4:
-      raise ValueError('Inputs to `DepthwiseConv2D` should have rank 4. '
-                       'Received input shape:', str(input_shape))
-    input_shape = tensor_shape.TensorShape(input_shape)
-    self.groups = input_shape[1] if self.data_format == 'channels_first' else input_shape[3]
-    channel_axis = self._get_channel_axis()
-    if input_shape.dims[channel_axis].value is None:
-      raise ValueError('The channel dimension of the inputs to '
-                       '`DepthwiseConv2D` '
-                       'should be defined. Found `None`.')
-    input_dim = int(input_shape[channel_axis])
-    depthwise_kernel_shape = (self.groups,
-                              self.depth_multiplier,
-                              self.kernel_size[0],
-                              self.kernel_size[1])
-
-    self.depthwise_initializer = tf.keras.initializers.get(self.depthwise_initializer)
-    self.depthwise_kernel = self.add_weight(
-        shape=depthwise_kernel_shape,
-        initializer=self.depthwise_initializer,
-        name='depthwise_kernel',
-        regularizer=self.depthwise_regularizer,
-        constraint=self.depthwise_constraint)
-
-    if self.use_bias:
-      self.bias = self.add_weight(shape=(upstride_type_to_dimension(self.upstride_datatype), input_dim * self.depth_multiplier,),
-                                  initializer=self.bias_initializer,
-                                  name='bias',
-                                  regularizer=self.bias_regularizer,
-                                  constraint=self.bias_constraint)
-    else:
-      self.bias = None
-    # Set input spec.
-    self.input_spec = InputSpec(ndim=4, axes={channel_axis: input_dim})
-    self.built = True
 
   def call(self, inputs):
     outputs = self.upstride_conv_op(

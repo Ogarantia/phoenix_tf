@@ -9,7 +9,7 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops, nn
 from tensorflow.python.keras import constraints, initializers, regularizers
 from .type_generic.custom_op import upstride_conv2d
-from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension
+from .type_generic.tf.keras.layers import TYPE0, append_outermost_dim, upstride_type_to_dimension
 from .type2.tf.keras.initializers import is_type2_init, QInitializerConv
 
 layers = tf.keras.layers
@@ -111,8 +111,7 @@ class GenericConv2D(layers.Conv2D):
     else:
       channel_axis = -1
       self.data_format = "NHWC"
-    self.input_spec = InputSpec(ndim=self.rank + 2,
-                                axes={channel_axis: input_channel})
+    self.input_spec = InputSpec(ndim=self.rank + 2, axes={channel_axis: input_channel})
 
     # Convert Keras formats to TF native formats.
     if self.padding == 'causal':
@@ -183,6 +182,63 @@ class GenericDepthwiseConv2D(GenericConv2D):
     self.depthwise_regularizer = tf.keras.regularizers.get(depthwise_regularizer)
     self.depthwise_constraint = tf.keras.constraints.get(depthwise_constraint)
     self.bias_initializer = tf.keras.initializers.get(bias_initializer)
+
+
+  def build(self, input_shape):
+    # check input shape rank
+    if len(input_shape) < 4:
+      raise ValueError('Inputs to `DepthwiseConv2D` should have rank 4. Received input shape:', str(input_shape))
+
+    # retrieve number of input channels (= number of groups for depthwise conv)
+    self.groups = self._get_input_channel(input_shape)
+    if self.groups is None:
+      raise ValueError('The channel dimension of the inputs to `DepthwiseConv2D` should be defined. Found `None`.')
+
+    # compute kernel shape
+    depthwise_kernel_shape = (self.groups,
+                              self.depth_multiplier,
+                              self.kernel_size[0],
+                              self.kernel_size[1])
+    if self.upstride_datatype != TYPE0:
+      depthwise_kernel_shape = (upstride_type_to_dimension(self.upstride_datatype),) + depthwise_kernel_shape
+
+    # datatype-specific initializer setup
+    if is_type2_init(self.depthwise_initializer):
+      self.depthwise_initializer = QInitializerConv(kernel_size=self.kernel_size,
+                                                    input_dim=1,
+                                                    weight_dim=self.rank,
+                                                    nb_filters=self.groups * self.depth_multiplier,
+                                                    criterion=self.depthwise_initializer.split("_")[-1],
+                                                    seed=None)
+
+    # initialize kernel tensor
+    self.depthwise_initializer = tf.keras.initializers.get(self.depthwise_initializer)
+    self.depthwise_kernel = self.add_weight(
+        name='depthwise_kernel',
+        shape=depthwise_kernel_shape,
+        initializer=self.depthwise_initializer,
+        regularizer=self.depthwise_regularizer,
+        constraint=self.depthwise_constraint,
+        trainable=True,
+        dtype=self.dtype)
+
+    # set bias
+    if self.use_bias:
+      self.bias = self.add_weight(
+          name='bias',
+          shape=(upstride_type_to_dimension(self.upstride_datatype), self.groups * self.depth_multiplier),
+          initializer=self.bias_initializer,
+          regularizer=self.bias_regularizer,
+          constraint=self.bias_constraint,
+          trainable=True,
+          dtype=self.dtype)
+    else:
+      self.bias = None
+
+    # Set input spec
+    channel_axis = self._get_channel_axis()
+    self.input_spec = InputSpec(ndim=4, axes={channel_axis: self.groups})
+    self.built = True
 
   def get_config(self):
     """Returns the configuration of the layer as a JSON-serializable dict.
