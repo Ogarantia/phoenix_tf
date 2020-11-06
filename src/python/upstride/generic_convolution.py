@@ -39,6 +39,8 @@ class GenericConv2D(layers.Conv2D):
     if is_type2_init(kernel_initializer):
       self.saved_kernel_initializer = kernel_initializer
       kernel_initializer = 'glorot_uniform'
+    else:
+      self.saved_kernel_initializer = None
     # self.groups are used for depthwise convolutions, which were introduced in TF 2.3. The following if statement
     # is a patch that allows us to have the attributes that we need in order to compute depthwise convolutions
     # regardless the tf.__version__
