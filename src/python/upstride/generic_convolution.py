@@ -80,7 +80,7 @@ class GenericConv2D(layers.Conv2D):
                                              input_shape))
 
     # change initializer if needed
-    if is_type2_init(self.kernel_initializer):
+    if is_type2_init(self.saved_kernel_initializer):
       self.kernel_initializer = QInitializerConv(kernel_size=self.kernel_size, input_dim=input_channel // self.groups,
                                                  weight_dim=self.rank, nb_filters=self.filters,
                                                  criterion=self.saved_kernel_initializer.split("_")[-1], seed=None)
