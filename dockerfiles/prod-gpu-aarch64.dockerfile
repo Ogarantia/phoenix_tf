@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y python3-pip python3-dev build-essential
         gfortran libopenblas-dev liblapack-dev
 
 RUN pip3 install -U pip cython
-RUN pip3 install -U --no-binary=h5py h5py 
+RUN pip3 install -U --no-binary=h5py h5py==2.10.0
 RUN pip3 install --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v44 tensorflow==${TF_VERSION}+nv20.8
 
 # add fancy UpStride bash welcome screen 
