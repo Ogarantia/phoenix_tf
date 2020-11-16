@@ -82,7 +82,6 @@ def benchmark_engine(filter, inputs, bias, use_bias, engine):
   # phoenix_tf when in dev build; cpython when in prod build
   if 'phoenix_tf' in engine.__file__ or 'cpython' in engine.__file__:
     data_format = 'channels_first'
-    bias = tf.expand_dims(bias, axis=0)
   elif 'tensorflow' in engine.__file__:
     data_format = 'channels_last'
     for i in range(num_rep):

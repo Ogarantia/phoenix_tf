@@ -13,7 +13,7 @@ from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
 from ....generic_layers import *
 from ....type_generic.tf.keras.layers import upstride_type_to_dimension
-from .initializers import is_type2_init, QInitializerConv
+from .initializers import is_type2_init, QInitializerConv, QInitializerDepthwiseConv, QInitializerDense
 
 generic_layers.upstride_type = 2
 generic_layers.blade_indexes = ["", "12", "23", "13"]
@@ -129,26 +129,28 @@ class Conv2D(GenericConv2D):
                bias_constraint=None,
                require_input_grad=True,
                **kwargs):
-    super().__init__(filters,
-                     kernel_size,
-                     strides,
-                     padding,
-                     data_format,
-                     dilation_rate,
-                     groups,
-                     activation,
-                     use_bias,
-                     kernel_initializer,
-                     bias_initializer,
-                     kernel_regularizer,
-                     bias_regularizer,
-                     activity_regularizer,
-                     kernel_constraint,
-                     bias_constraint,
-                     require_input_grad,
+    # intercept kernel initializer string
+    if is_type2_init(kernel_initializer):
+      kernel_initializer = QInitializerConv(criterion=kernel_initializer, groups=groups)
+    super().__init__(filters=filters,
+                     kernel_size=kernel_size,
+                     strides=strides,
+                     padding=padding,
+                     data_format=data_format,
+                     dilation_rate=dilation_rate,
+                     groups=groups,
+                     activation=activation,
+                     use_bias=use_bias,
+                     kernel_initializer=kernel_initializer,
+                     bias_initializer=bias_initializer,
+                     kernel_regularizer=kernel_regularizer,
+                     bias_regularizer=bias_regularizer,
+                     activity_regularizer=activity_regularizer,
+                     kernel_constraint=kernel_constraint,
+                     bias_constraint=bias_constraint,
+                     require_input_grad=require_input_grad,
                      **kwargs)
     self.upstride_datatype = TYPE2
-
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
 class DepthwiseConv2D(GenericDepthwiseConv2D):
@@ -158,6 +160,7 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                padding='valid',
                depth_multiplier=1,
                data_format=None,
+               dilation_rate=(1, 1),
                activation=None,
                use_bias=True,
                depthwise_initializer='up2_init_he',
@@ -167,13 +170,18 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                activity_regularizer=None,
                depthwise_constraint=None,
                bias_constraint=None,
+               require_input_grad=True,
                **kwargs):
+    # intercept kernel initializer string
+    if is_type2_init(depthwise_initializer):
+      depthwise_initializer = QInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier)
     super().__init__(
         kernel_size=kernel_size,
         strides=strides,
         padding=padding,
         depth_multiplier=depth_multiplier,
         data_format=data_format,
+        dilation_rate=dilation_rate,
         activation=activation,
         use_bias=use_bias,
         depthwise_initializer=depthwise_initializer,
@@ -183,27 +191,9 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         activity_regularizer=activity_regularizer,
         depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
+        require_input_grad=require_input_grad,
         **kwargs)
     self.upstride_datatype = TYPE2
-
-  def call(self, inputs):
-    outputs = self.upstride_conv_op(
-        inputs,
-        self.depthwise_kernel,
-        self.bias if self.use_bias else [],
-        uptype=self.upstride_datatype,
-        strides=self.strides,
-        padding=self.padding.upper(),
-        dilations=self.dilation_rate,
-        data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
-        name=self.name,
-        groups=self.groups,
-        use_bias=self.use_bias)
-
-    if self.activation is not None:
-      return self.activation(outputs)
-
-    return outputs
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
@@ -221,18 +211,21 @@ class Dense(GenericDense):
                bias_constraint=None,
                require_input_grad=True,
                **kwargs):
-    super().__init__(units,
-                      activation,
-                      use_bias,
-                      kernel_initializer,
-                      bias_initializer,
-                      kernel_regularizer,
-                      bias_regularizer,
-                      activity_regularizer,
-                      kernel_constraint,
-                      bias_constraint,
-                      require_input_grad,
-                      **kwargs)
+    # intercept kernel initializer string
+    if is_type2_init(kernel_initializer):
+      kernel_initializer = QInitializerDense(criterion=kernel_initializer)
+    super().__init__(units=units,
+                     activation=activation,
+                     use_bias=use_bias,
+                     kernel_initializer=kernel_initializer,
+                     bias_initializer=bias_initializer,
+                     kernel_regularizer=kernel_regularizer,
+                     bias_regularizer=bias_regularizer,
+                     activity_regularizer=activity_regularizer,
+                     kernel_constraint=kernel_constraint,
+                     bias_constraint=bias_constraint,
+                     require_input_grad=require_input_grad,
+                     **kwargs)
     self.upstride_datatype = TYPE2
 
 

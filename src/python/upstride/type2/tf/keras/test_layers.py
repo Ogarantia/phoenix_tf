@@ -235,7 +235,7 @@ class TestType2DepthwiseConv2D(TestCase):
     model_up = DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, bias_initializer='glorot_uniform', use_bias=use_bias)
     model_up(cpp_inputs)
     # Defines model_up.kernel as being equal to depthwise_kernel. It is necessary to use get_gradient_and_output_upstride()
-    model_up.kernel = model_up.depthwise_kernel
+    model_up.kernel = model_up.kernel
 
     dinputs_upstride, dweights_upstride, dbias_upstride, output_upstride = get_gradient_and_output_upstride(cpp_inputs, model_up)
 
@@ -250,7 +250,7 @@ class TestType2DepthwiseConv2D(TestCase):
     # Defines depthwise_kernel_tf from model_up.depthwise_kernel as being a list and transposing it elements from iohw to hwio
     depthwise_kernel_tf = []
     for i in range(4):
-      depthwise_kernel_tf.append(tf.transpose(model_up.depthwise_kernel[i, :], [2, 3, 0, 1]))
+      depthwise_kernel_tf.append(tf.transpose(model_up.kernel[i, :], [2, 3, 0, 1]))
 
     dinputs_tf_list, dweights_tf_list, dbias_tf_list, output_tf_list = get_gradient_and_output_tf(py_inputs, model_tf, depthwise_kernel_tf, bias=model_up.bias if use_bias else None)
 

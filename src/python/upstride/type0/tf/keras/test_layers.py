@@ -285,11 +285,11 @@ class TestDepthwiseConv2D(TestCase):
     # Sets weights from the TF model to be equal to the ones on the Phoenix model, up to a transposition
     ref_params = model_up.get_weights()
     if use_bias:
-      model_tf.set_weights([tf.transpose(ref_params[0], [2, 3, 0, 1]), ref_params[1][0, :]])
+      model_tf.set_weights([tf.transpose(ref_params[0], [2, 3, 0, 1]), ref_params[1]])
     else:
       model_tf.set_weights([tf.transpose(ref_params[0], [2, 3, 0, 1])])
 
-    output_upstride, dinputs_upstride, dweights_upstride, dbias_upstride = get_output_and_gradients(model_up, model_up.depthwise_kernel, inputs)
+    output_upstride, dinputs_upstride, dweights_upstride, dbias_upstride = get_output_and_gradients(model_up, model_up.kernel, inputs)
     output_tf, dinputs_tf, dweights_tf, dbias_tf = get_output_and_gradients(model_tf, model_tf.depthwise_kernel, inputs)
 
     self.assert_and_print(output_upstride, output_tf, "DepthwiseConv2D", "output")
@@ -333,7 +333,7 @@ class TestDense(TestCase):
     model_tf(inputs)
 
     if use_bias:
-      model_up.set_weights([weights, tf.expand_dims(bias, 0)])
+      model_up.set_weights([weights, bias])
       model_tf.set_weights([weights, bias])
     else:
       model_up.set_weights([weights])

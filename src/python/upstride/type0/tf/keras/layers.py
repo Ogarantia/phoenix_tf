@@ -69,23 +69,23 @@ class Conv2D(GenericConv2D):
                bias_constraint=None,
                require_input_grad=True,
                **kwargs):
-    super().__init__(filters,
-                     kernel_size,
-                     strides,
-                     padding,
-                     data_format,
-                     dilation_rate,
-                     groups,
-                     activation,
-                     use_bias,
-                     kernel_initializer,
-                     bias_initializer,
-                     kernel_regularizer,
-                     bias_regularizer,
-                     activity_regularizer,
-                     kernel_constraint,
-                     bias_constraint,
-                     require_input_grad,
+    super().__init__(filters=filters,
+                     kernel_size=kernel_size,
+                     strides=strides,
+                     padding=padding,
+                     data_format=data_format,
+                     dilation_rate=dilation_rate,
+                     groups=groups,
+                     activation=activation,
+                     use_bias=use_bias,
+                     kernel_initializer=kernel_initializer,
+                     bias_initializer=bias_initializer,
+                     kernel_regularizer=kernel_regularizer,
+                     bias_regularizer=bias_regularizer,
+                     activity_regularizer=activity_regularizer,
+                     kernel_constraint=kernel_constraint,
+                     bias_constraint=bias_constraint,
+                     require_input_grad=require_input_grad,
                      **kwargs)
     self.upstride_datatype = TYPE0
 
@@ -98,6 +98,7 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                padding='valid',
                depth_multiplier=1,
                data_format=None,
+               dilation_rate=(1, 1),
                activation=None,
                use_bias=True,
                depthwise_initializer='glorot_uniform',
@@ -107,6 +108,7 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                activity_regularizer=None,
                depthwise_constraint=None,
                bias_constraint=None,
+               require_input_grad=True,
                **kwargs):
     super().__init__(
         kernel_size=kernel_size,
@@ -114,6 +116,7 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         padding=padding,
         depth_multiplier=depth_multiplier,
         data_format=data_format,
+        dilation_rate=dilation_rate,
         activation=activation,
         use_bias=use_bias,
         depthwise_initializer=depthwise_initializer,
@@ -123,27 +126,9 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         activity_regularizer=activity_regularizer,
         depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
+        require_input_grad=require_input_grad,
         **kwargs)
     self.upstride_datatype = TYPE0
-
-  def call(self, inputs):
-    outputs = self.upstride_conv_op(
-        inputs,
-        self.depthwise_kernel,
-        self.bias if self.use_bias else [],
-        uptype=self.upstride_datatype,
-        strides=self.strides,
-        padding=self.padding.upper(),
-        dilations=self.dilation_rate,
-        data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
-        name=self.name,
-        groups=self.groups,
-        use_bias=self.use_bias)
-
-    if self.activation is not None:
-      return self.activation(outputs)
-
-    return outputs
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type0")
@@ -161,17 +146,16 @@ class Dense(GenericDense):
                bias_constraint=None,
                require_input_grad=True,
                **kwargs):
-    super().__init__(units,
-                      activation,
-                      use_bias,
-                      kernel_initializer,
-                      bias_initializer,
-                      kernel_regularizer,
-                      bias_regularizer,
-                      activity_regularizer,
-                      kernel_constraint,
-                      bias_constraint,
-                      require_input_grad,
-                      **kwargs)
-                      
+    super().__init__(units=units,
+                     activation=activation,
+                     use_bias=use_bias,
+                     kernel_initializer=kernel_initializer,
+                     bias_initializer=bias_initializer,
+                     kernel_regularizer=kernel_regularizer,
+                     bias_regularizer=bias_regularizer,
+                     activity_regularizer=activity_regularizer,
+                     kernel_constraint=kernel_constraint,
+                     bias_constraint=bias_constraint,
+                     require_input_grad=require_input_grad,
+                     **kwargs)
     self.upstride_datatype = TYPE0
