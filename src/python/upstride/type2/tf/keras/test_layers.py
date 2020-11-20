@@ -2,13 +2,17 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from upstride.type_generic.test import TestCase, apply_some_non_linearity
+from ....type_generic.test import setUpModule, Conv2DTestSet, TestCase, apply_some_non_linearity
+from ....type_generic.clifford_product import CliffordProduct
+from .... import utils
 
 
-def setUpModule():
-  """ Called by unittest to prepare the module
-  """
-  TestCase.setup()
+clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
+setUpModule()
+
+class Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, layers.Conv2D)
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
@@ -40,9 +44,10 @@ def get_gradient_and_output_tf(inputs, function, kernels, bias=None):
       outputs[i] = apply_some_non_linearity(outputs[i])
     if bias is not None:
       dbias = [gt.gradient(outputs, b) for b in biases]
-    outputs = [tf.transpose(outputs[i], [0, 3, 1, 2]) for i in range(len(outputs))]
+    permutation = utils.permutation("NHWC", "NCHW")
+    outputs = [tf.transpose(outputs[i], permutation) for i in range(len(outputs))]
   dinputs = [gt.gradient(outputs, e) for e in inputs]
-  dinputs = [tf.transpose(dinputs[i], [0, 3, 1, 2]) for i in range(len(dinputs))]
+  dinputs = [tf.transpose(dinputs[i], permutation) for i in range(len(dinputs))]
   dkernels = gt.gradient(outputs, kernels)
   return dinputs, dkernels, dbias, outputs
 
@@ -111,7 +116,7 @@ class TestType2Conv2DBasic(unittest.TestCase):
     inputs = tf.random.uniform((4, 1, 1, 1))
     # upstride conv
     upstride_output = upstride_conv(inputs)
-    tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, [2, 3, 1, 0]), 1, "SAME") # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
+    tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, utils.permutation("OIHW", "HWIO")), 1, "SAME") # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
     inputs = tf.reshape(inputs, [4, 1, 1, 1, 1])
     tf_output = quaternion_mult_naive(tf_op, inputs, kernels)
 
@@ -157,7 +162,7 @@ class TestType2Conv2D(TestCase):
   def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, batch_size=3):
     # initialize inputs
     py_inputs = [tf.cast(tf.random.uniform((batch_size, img_size, img_size, in_channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
-    py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
+    py_inputs_channels_first = [tf.transpose(_, utils.permutation("NHWC", "NCHW")) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
     upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
@@ -174,7 +179,7 @@ class TestType2Conv2D(TestCase):
 
     def py_conv(inputs, kernels, biases):
       # upstride kernel is (O, I, H, W). TF expects (H, W, I, O)
-      tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, [2, 3, 1, 0]), strides=strides, padding=padding, dilations=dilations)
+      tf_op = lambda i,k : tf.nn.conv2d(i, tf.transpose(k, utils.permutation("OIHW", "HWIO")), strides=strides, padding=padding, dilations=dilations)
       outputs = quaternion_mult_naive(tf_op, inputs, kernels)
       if biases != []:
         outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
@@ -229,7 +234,7 @@ class TestType2DepthwiseConv2D(TestCase):
     """
     # Initializes inputs: For tensorflow/python-based engine, list of 4 tensors. For phoenix, tf.concat(py_inputs)
     py_inputs = [tf.cast(tf.random.uniform((1, img_size, img_size, channels), dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32) for _ in range(4)]
-    py_inputs_channels_first = [tf.transpose(_, [0, 3, 1, 2]) for _ in py_inputs]
+    py_inputs_channels_first = [tf.transpose(_, utils.permutation("NHWC", "NCHW")) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
     # Defines upstride model and initializes weights.
     model_up = DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, bias_initializer='glorot_uniform', use_bias=use_bias)
@@ -250,14 +255,14 @@ class TestType2DepthwiseConv2D(TestCase):
     # Defines depthwise_kernel_tf from model_up.depthwise_kernel as being a list and transposing it elements from iohw to hwio
     depthwise_kernel_tf = []
     for i in range(4):
-      depthwise_kernel_tf.append(tf.transpose(model_up.kernel[i, :], [2, 3, 0, 1]))
+      depthwise_kernel_tf.append(tf.transpose(model_up.kernel[i, :], [2, 3, 0, 1])) # TODO verify if permutation is correct
 
     dinputs_tf_list, dweights_tf_list, dbias_tf_list, output_tf_list = get_gradient_and_output_tf(py_inputs, model_tf, depthwise_kernel_tf, bias=model_up.bias if use_bias else None)
 
     # Transforms the list of tensors from python/tensorflow-based engine into tensors, for comparing them later on
     output_tf = tf.concat(output_tf_list, axis=0)
     dinputs_tf = tf.concat(dinputs_tf_list, axis=0)
-    dweights_tf = tf.transpose(tf.stack(dweights_tf_list, axis=0), [0, 3, 4, 1, 2])
+    dweights_tf = tf.transpose(tf.stack(dweights_tf_list, axis=0), [0, 3, 4, 1, 2]) # TODO verify if permutation is correct
     if use_bias:
       dbias_tf = tf.stack(dbias_tf_list, axis=0)
 

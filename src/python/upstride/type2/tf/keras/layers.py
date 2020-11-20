@@ -3,16 +3,12 @@ from typing import Dict
 import tensorflow as tf
 from tensorflow.keras import initializers
 from tensorflow.keras.layers import Layer
-from tensorflow.python.framework import load_library, tensor_shape
-from tensorflow.python.keras.engine import base_layer_utils
-from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.utils import conv_utils, tf_utils
 from upstride.generic_convolution import GenericConv2D, GenericDepthwiseConv2D
 from upstride.generic_dense import GenericDense
 from upstride.type_generic.tf.keras.layers import TYPE2
 from .... import generic_layers
 from ....generic_layers import *
-from ....type_generic.tf.keras.layers import upstride_type_to_dimension
 from .initializers import is_type2_init, QInitializerConv, QInitializerDepthwiseConv, QInitializerDense
 
 generic_layers.upstride_type = 2

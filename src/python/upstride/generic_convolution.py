@@ -18,7 +18,7 @@ class Conv2DKernelInitWrapper(CustomInitializer):
   Keras initializers may use the kernel shape to adjust parameters of the distribution used to produce the initial
   value of a convolution kernel. The kernel shape is different between UpStride and keras, namely
    - the layouts are different: UpStride type0 kernels are OIHW, while keras kernels are HWIO,
-   - for an n-dimensional algebra, UpStride kernels are nHWIO.
+   - for an n-dimensional algebra, UpStride kernels are nOIHW.
   This class makes sure the initial distribution matches the expected one when using a standard keras initializer.
   """
   def __init__(self, initializer):

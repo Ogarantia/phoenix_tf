@@ -19,19 +19,18 @@ def framework_mapping(upstride_bool, datatype_int):
   print('*')
   if datatype_int == 0 and upstride_bool: # type0 upstride
     import upstride.type0.tf.keras.layers as up
+    factor = 1
   elif datatype_int == 0 and not upstride_bool: # type0 tensorflow
     framework = tf.keras.layers
+    factor = 1
+  elif datatype_int == 1: # type1 upstride (phoenix OR python)
+    import upstride.type1.tf.keras.layers as up
+    factor = 2
   elif datatype_int == 2: # type2 upstride (phoenix OR python)
     import upstride.type2.tf.keras.layers as up
-  # elif datatype_int == 2 and not upstride_bool:
-  #   # raise ValueError(f"Incoherent arguments datatype_int {datatype_int} and upstride_bool False. When upstride_bool is false, datatype_int is expected to be 0.")
+    factor = 4
   else:
     raise ValueError("The datatype_int chosen is not implemented.")
-
-  if datatype_int == 0:
-    factor = 1
-  else:
-    factor = 4
 
   if upstride_bool:
     print("* Using Upstride phoenix")

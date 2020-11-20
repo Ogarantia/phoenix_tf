@@ -1,17 +1,13 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
-from upstride.generic_convolution import GenericConv2D, GenericDepthwiseConv2D
-from upstride.generic_dense import GenericDense
-from upstride.type_generic.tf.keras.layers import TYPE0
+from ....generic_convolution import GenericConv2D, GenericDepthwiseConv2D
+from ....generic_dense import GenericDense
+from ....type_generic.tf.keras.layers import TYPE1
 from .... import generic_layers
-from ....generic_layers import *
 
-generic_layers.upstride_type = 0
-generic_layers.blade_indexes = [""]
-generic_layers.geometrical_def = (0, 0, 0)
-
-# If you wish to overwrite some layers, please implement them here
-
+generic_layers.upstride_type = 1
+generic_layers.blade_indexes = ["", "12"]
+generic_layers.geometrical_def = (2, 0, 0)
 
 class TF2Upstride(Layer):
   """assume this function is called at the begining of the network. 
@@ -40,7 +36,7 @@ class Upstride2TF(Layer):
     return x
 
 
-@tf.keras.utils.register_keras_serializable("upstride_type0")
+@tf.keras.utils.register_keras_serializable("upstride_type1")
 class Conv2D(GenericConv2D):
   def __init__(self, filters,
                kernel_size,
@@ -78,10 +74,10 @@ class Conv2D(GenericConv2D):
                      bias_constraint=bias_constraint,
                      require_input_grad=require_input_grad,
                      **kwargs)
-    self.upstride_datatype = TYPE0
+    self.upstride_datatype = TYPE1
 
 
-@tf.keras.utils.register_keras_serializable("upstride_type0")
+@tf.keras.utils.register_keras_serializable("upstride_type1")
 class DepthwiseConv2D(GenericDepthwiseConv2D):
   def __init__(self,
                kernel_size,
@@ -119,10 +115,10 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         bias_constraint=bias_constraint,
         require_input_grad=require_input_grad,
         **kwargs)
-    self.upstride_datatype = TYPE0
+    self.upstride_datatype = TYPE1
 
 
-@tf.keras.utils.register_keras_serializable("upstride_type0")
+@tf.keras.utils.register_keras_serializable("upstride_type1")
 class Dense(GenericDense):
   def __init__(self,
                units,
@@ -149,4 +145,4 @@ class Dense(GenericDense):
                      bias_constraint=bias_constraint,
                      require_input_grad=require_input_grad,
                      **kwargs)
-    self.upstride_datatype = TYPE0
+    self.upstride_datatype = TYPE1
