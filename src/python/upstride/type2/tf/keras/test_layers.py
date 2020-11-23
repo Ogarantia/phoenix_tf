@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from ....type_generic.test import setUpModule, Conv2DTestSet, TestCase, apply_some_non_linearity
+from ....type_generic.test import setUpModule, Conv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
 from ....type_generic.clifford_product import CliffordProduct
 from .... import utils
 
@@ -10,9 +10,19 @@ from .... import utils
 clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
 setUpModule()
 
-class Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+class Type2Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
   def setUp(self):
-    self.setup(clifford_product, layers.Conv2D)
+    self.setup(clifford_product, Conv2D)
+
+
+class Type2DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, DepthwiseConv2D)
+
+
+class Type2DenseTestSet(DenseTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, Dense)
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):

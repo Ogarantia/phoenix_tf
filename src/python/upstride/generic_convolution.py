@@ -10,19 +10,26 @@ from tensorflow.python.ops import array_ops, nn
 from tensorflow.python.keras import constraints, initializers, regularizers
 from .type_generic.custom_op import upstride_conv2d
 from .type_generic.tf.keras.layers import TYPE0, append_outermost_dim, upstride_type_to_dimension, CustomInitializer
-
+from .utils import permutation
 
 
 class Conv2DKernelInitWrapper(CustomInitializer):
   """ Wraps a standard keras kernel initializer to generate a convolution kernel for a given algebra
   Keras initializers may use the kernel shape to adjust parameters of the distribution used to produce the initial
   value of a convolution kernel. The kernel shape is different between UpStride and keras, namely
-   - the layouts are different: UpStride type0 kernels are OIHW, while keras kernels are HWIO,
+   - the layouts are different: UpStride type0 kernels are OIHW, while keras kernels are HWIO for regular convolutions
+     and HWOI for depthwise convolutions,
    - for an n-dimensional algebra, UpStride kernels are nOIHW.
   This class makes sure the initial distribution matches the expected one when using a standard keras initializer.
   """
-  def __init__(self, initializer):
+  def __init__(self, initializer, depthwise=False):
     self.initializer = tf.keras.initializers.get(initializer)
+    # get permutations
+    # OIHW is the UpStride way, HWIO / HWOI is expected by TensorFlow
+    upstride = 'OIHW'
+    tensorflow = 'HWOI' if depthwise else 'HWIO'
+    self.up_to_tf = permutation(upstride, tensorflow)
+    self.tf_to_up = permutation(tensorflow, upstride)
 
   def __call__(self, shape, dtype=None):
     # type0 convolutions use 4-dim kernels; other algebras have the 5th outermost blade dimension
@@ -30,15 +37,14 @@ class Conv2DKernelInitWrapper(CustomInitializer):
     if len(shape) == 4:
       shape = (1,) + shape
 
-    # get the shape of a single blade reordering the dimensions from OIHW to HWIO
-    # OIHW is the UpStride way, HWIO is expected by TensorFlow
-    blade_shape = tuple(shape[i + 1] for i in [2, 3, 1, 0])
+    # get the shape of a single blade reordering the dimensions from upstride to TF
+    blade_shape = tuple(shape[i + 1] for i in self.up_to_tf)
 
     # initialize blades separately using the keras initializer
     blades = [self.initializer(blade_shape, dtype=dtype) for _ in range(shape[0])]
 
     # transpose the dimensions back to match the UpStride layout
-    blades = [tf.transpose(blade, (3, 2, 0, 1)) for blade in blades]
+    blades = [tf.transpose(blade, self.tf_to_up) for blade in blades]
 
     # concat the blades if needed and return
     return tf.stack(blades, axis=0) if shape[0] > 1 else blades[0]
@@ -49,7 +55,6 @@ class Conv2DKernelInitWrapper(CustomInitializer):
   @classmethod
   def from_config(config):
     return Conv2DKernelInitWrapper(super().from_config(config))
-
 
 class GenericConv2D(tf.keras.layers.Conv2D):
   def __init__(self,
@@ -198,7 +203,7 @@ class GenericDepthwiseConv2D(GenericConv2D):
 
     # Intercept keras initializer
     if depthwise_initializer and not isinstance(depthwise_initializer, CustomInitializer):
-      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer)
+      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer, depthwise=True)
 
     super().__init__(
         filters=None,

@@ -1,7 +1,7 @@
 import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
-from ....type_generic.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, TestCase
+from ....type_generic.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
 from ....type_generic.clifford_product import CliffordProduct
 from packaging import version
 from .layers import DepthwiseConv2D, Conv2D, Dense
@@ -10,9 +10,19 @@ clifford_product = CliffordProduct((0, 0, 0), [""])
 setUpModule()
 
 
-class Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+class Type0Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, Conv2D)
+
+
+class Type0DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, DepthwiseConv2D)
+
+
+class Type0DenseTestSet(DenseTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, Dense)
 
 
 def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32, batch_size=2, val=0.5):

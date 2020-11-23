@@ -25,7 +25,7 @@ def transpose_to_channel_first(tensor):
 def random_integer_tensor(shape, dtype=None):
   """ Generates a random tensor containing integer values
   """
-  tensor = tf.random.uniform(shape, -5, +5, dtype=tf.int32)
+  tensor = tf.random.uniform(shape, -4, +4, dtype=tf.int32)
   return tf.cast(tensor, dtype or tf.float32)
 
 def apply_some_non_linearity(x):
@@ -40,7 +40,7 @@ class CliffordProductLayer(tf.keras.layers.Layer):
     """ Creates a wrapper for a keras class
     :clifford_product: a Clifford product specification
     :layer_class:      scalar keras layer class to wrap, e.g. tf.keras.layers.Conv2D
-    Keyword arguments are forwarded to the wrapped layer class constructor. 
+    Keyword arguments are forwarded to the wrapped layer class constructor.
     """
     super().__init__()
     # make sure there is no use_bias
@@ -114,24 +114,27 @@ class TestBase:
     return tf.config.list_physical_devices('GPU') != []
 
 class Conv2DTestBase(TestBase):
-  def setup(self, clifford_product, ref_op_class, test_op_class):
+  def setup(self, clifford_product, ref_op_class, test_op_class, kernel_initializer):
     """ Type-agnostic convolution forward and backward pass test set
     :clifford_product:    Clifford product specification defining the algebra being tested
     :ref_op_class:        reference scalar operation class, e.g. tf.keras.layers.Conv2D
     :test_op_class:       test operation class implementing the convolution for the algebra being tested
+    :kernel_initializer:  argument name to pass to the layer, 'kernel_initializer' or 'depthwise_initializer'
+                          depending on which convolution operation is used
     """
     self.clifford_product = clifford_product
     self.ref_op_class = ref_op_class
     self.test_op_class = test_op_class
+    self.kernel_initializer = kernel_initializer
 
   def run_conv2d_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
-    """ Runs a single instance of a convolution forward and backward pass test for a given parameter set.
+    """ Runs a single instance of a forward and backward pass test for a given parameter set.
     The reference operation is run in channel-last format for compatibility with CPU backend.
     The test operation is run in channel-first.
-    :test_shape:          test input shape in channel-last format (NCHW)
+    :test_shape:          test input shape in channel-last format (NHWC)
     :dtype:               scalar data type of the test batch
     """
-    assert 'kernel_initializer' not in kwargs, 'kernel_initializer option is not supported in this test'
+    assert self.kernel_initializer not in kwargs, 'kernel_initializer option is not supported in this test'
     assert 'bias_initializer' not in kwargs, 'bias_initializer option is not supported in this test'
     assert 'data_format' not in kwargs, 'data_format option is not supported in this test'
 
@@ -141,14 +144,15 @@ class Conv2DTestBase(TestBase):
     # prepare bias
     use_bias = kwargs.pop('use_bias', False)
     if use_bias:
-      bias = random_integer_tensor((self.clifford_product.dim, kwargs.get('filters')), dtype=dtype)
+      bias_length = kwargs.get('filters', test_shape[-1])
+      bias = random_integer_tensor((self.clifford_product.dim, bias_length), dtype=dtype)
 
     # construct reference operation
+    kwargs[self.kernel_initializer] = random_integer_tensor
     ref_op = CliffordProductLayer(self.clifford_product, self.ref_op_class,
       data_format='channels_last',
-      kernel_initializer=random_integer_tensor,
       **kwargs)
-    
+
     # run once to get it ready
     ref_op(tf.zeros_like(input_tensor))
 
@@ -175,10 +179,10 @@ class Conv2DTestBase(TestBase):
     ref_kernel_grad = [gt.gradient(ref_output, k) for k in kernels]
 
     # create test operation
+    kwargs[self.kernel_initializer] = lambda shape, dtype: kernels.pop(0).numpy()
     test_op = self.test_op_class(
       use_bias=use_bias,
       data_format='channels_first',
-      kernel_initializer=lambda shape, dtype: kernels.pop(0).numpy(),
       bias_initializer=lambda shape, dtype: tf.squeeze(bias) if use_bias else [],
       **kwargs)
 
@@ -190,14 +194,14 @@ class Conv2DTestBase(TestBase):
 
     # get its kernel
     kernel = test_op.weights[0]
-    
+
     # run the test operation and watch on gradients
     with tf.GradientTape(persistent=True) as gt:
       gt.watch(input_tensor)
       gt.watch(kernel)
       test_output = test_op(input_tensor)
       test_output = apply_some_non_linearity(test_output)
-    
+
     # get gradients
     test_input_grad = gt.gradient(test_output, input_tensor)
     test_kernel_grad = gt.gradient(test_output, kernel)
@@ -206,14 +210,14 @@ class Conv2DTestBase(TestBase):
     ref_output = transpose_to_channel_first(ref_output)
     ref_input_grad = transpose_to_channel_first(ref_input_grad)
     ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", "nOIHW"))
-    
+
     # assert on the difference
     self.assert_zero_integer_difference(ref_output, test_output)
     self.assert_zero_integer_difference(ref_input_grad, test_input_grad)
     self.assert_zero_integer_difference(ref_kernel_grad, test_kernel_grad)
 
   def run_fp16_conv2d_test_instance(self, test_shape, **kwargs):
-    """ Runs a half-precision floating-point convolution forward and backward pass test
+    """ Runs a half-precision floating-point forward and backward pass test
     """
     tf.keras.backend.set_floatx('float16')
     try:
@@ -226,54 +230,214 @@ class Conv2DTestSet(Conv2DTestBase):
   """ Test set for regular Conv2D operation
   """
   def setup(self, clifford_product, test_op_class):
-    super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class)
+    super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class, 'kernel_initializer')
 
-  # basic test
   def test_basic(self):
+    """ Basic Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=3)
 
-  # bigger batch
   def test_bigger_batch(self):
+    """ Conv2D with bigger batch test """
     self.run_conv2d_test_instance(test_shape=(5, 3, 3, 8), filters=32, kernel_size=3)
 
-  # pointwise convolution
   def test_pointwise(self):
+    """ Pointwise Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=1)
 
-  # strided convolution
   def test_strided(self):
+    """ Strided Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 64), filters=16, strides=(2, 3), kernel_size=2)
-  
-  # dilated convolution
+
   def test_dilated(self):
+    """ Dilated Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), filters=16, dilation_rate=(2, 3), kernel_size=3)
 
-  # non-square image shape
   def test_non_square(self):
+    """ Non-square image Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 15, 3, 64), filters=16, kernel_size=2)
 
-  # bias
   def test_bias(self):
+    """ Biased Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True)
 
-  # padding "same"
   def test_padded(self):
+    """ Padded Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 32), filters=32, kernel_size=3, padding='same')
 
-  # padding "same" and strides
   def test_padded_strided(self):
+    """ Padded strided Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), filters=32, kernel_size=3, strides=2, padding='same')
 
-  # padding "same" and dilations
   def test_padded_dilated(self):
+    """ Padded dilated Conv2D test """
     self.run_conv2d_test_instance(test_shape=(2, 7, 7, 16), filters=32, kernel_size=3, dilation_rate=(2, 2), padding='same')
 
-  # grouped conv
   @unittest.skipIf(not TestBase.uses_gpu(), "grouped conv not supported on CPU")
   def test_grouped(self):
+    """ Group Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 64), filters=48, groups=4, kernel_size=3)
 
-  # float16 test on GPU
   @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
   def test_fp16(self):
+    """ Half-precision floating point Conv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True)
+
+
+class DepthwiseConv2DTestSet(Conv2DTestBase):
+  """ Test set for regular Conv2D operation
+  """
+  def setup(self, clifford_product, test_op_class):
+    super().setup(clifford_product, tf.keras.layers.DepthwiseConv2D, test_op_class, 'depthwise_initializer')
+
+  def test_basic(self):
+    """ Basic DepthwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3)
+
+  def test_bigger_batch(self):
+    """ Conv2D with bigger batch test """
+    self.run_conv2d_test_instance(test_shape=(5, 3, 3, 16), kernel_size=3)
+
+  def test_strided(self):
+    """ Strided Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 11, 11, 32), strides=3, kernel_size=4)
+
+  def test_dilated(self):
+    """ Dilated Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), dilation_rate=(2, 3), kernel_size=3)
+
+  def test_non_square(self):
+    """ Non-square image Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 15, 3, 64), kernel_size=2)
+
+  def test_bias(self):
+    """ Biased Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 3, 3, 64), kernel_size=1, use_bias=True)
+
+  def test_padded(self):
+    """ Padded Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3, padding='same')
+
+  def test_padded_strided(self):
+    """ Padded strided Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), kernel_size=3, strides=2, padding='same')
+
+  def test_padded_dilated(self):
+    """ Padded dilated Conv2D test """
+    self.run_conv2d_test_instance(test_shape=(2, 7, 7, 16), kernel_size=3, dilation_rate=(2, 2), padding='same')
+
+  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  def test_fp16(self):
+    """ Half-precision floating point Conv2D test """
+    self.run_fp16_conv2d_test_instance(test_shape=(2, 3, 3, 4), kernel_size=2, use_bias=True)
+
+
+class DenseTestSet(TestBase):
+  def setup(self, clifford_product, test_op_class):
+    """ Type-agnostic Dense forward and backward pass test set
+    :clifford_product:    Clifford product specification defining the algebra being tested
+    :test_op_class:       test Dense operation class implementing the convolution for the algebra being tested
+    """
+    self.clifford_product = clifford_product
+    self.test_op_class = test_op_class
+
+  def run_dense_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
+    """ Runs a single instance of a forward and backward pass test for a given parameter set.
+    :test_shape:          test input shape of rank 2 (in NC format)
+    :dtype:               scalar data type of the test batch
+    """
+    assert 'kernel_initializer' not in kwargs, 'kernel_initializer option is not supported in this test'
+    assert 'bias_initializer' not in kwargs, 'bias_initializer option is not supported in this test'
+
+    # generate channel-last random input
+    input_tensor = random_integer_tensor((test_shape[0] * self.clifford_product.dim,) + test_shape[1:], dtype=dtype)
+
+    # prepare bias
+    use_bias = kwargs.pop('use_bias', False)
+    if use_bias:
+      bias = random_integer_tensor((self.clifford_product.dim, kwargs.get('units')), dtype=dtype)
+
+    # construct reference operation
+    kwargs['kernel_initializer'] = random_integer_tensor
+    ref_op = CliffordProductLayer(self.clifford_product, tf.keras.layers.Dense, **kwargs)
+
+    # run once to get it ready
+    ref_op(tf.zeros_like(input_tensor))
+
+    # get kernels TF variables
+    kernels = [layer.weights[0] for layer in ref_op.layers]
+
+    # run and watch on gradients
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch(input_tensor)
+      gt.watch(kernels)
+      # run reference op
+      ref_output = ref_op(input_tensor)
+      # add bias if any
+      if use_bias:
+        ref_output = tf.split(ref_output, self.clifford_product.dim, axis=0)
+        for i in range(len(ref_output)):
+          ref_output[i] = tf.nn.bias_add(ref_output[i], bias[i,:])
+        ref_output = tf.concat(ref_output, axis=0)
+      # apply a non-linearity
+      ref_output = apply_some_non_linearity(ref_output)
+
+    # get gradients
+    ref_input_grad = gt.gradient(ref_output, input_tensor)
+    ref_kernel_grad = [gt.gradient(ref_output, k) for k in kernels]
+
+    # prepare test kernel initializer: reference kernels are stacked along the outermost dimension
+    kernels = tf.squeeze(tf.stack(kernels, axis=0))
+    kwargs['kernel_initializer'] = lambda shape, dtype: kernels
+
+    # create test operation
+    test_op = self.test_op_class(use_bias=use_bias,
+                                 bias_initializer=lambda shape, dtype: tf.squeeze(bias) if use_bias else [],
+                                 **kwargs)
+
+    # run the test operation once to get it ready
+    test_op(tf.zeros_like(input_tensor))
+
+    # get its kernel
+    kernel = test_op.weights[0]
+
+    # run the test operation and watch on gradients
+    with tf.GradientTape(persistent=True) as gt:
+      gt.watch(input_tensor)
+      gt.watch(kernel)
+      test_output = test_op(input_tensor)
+      test_output = apply_some_non_linearity(test_output)
+
+    # get gradients
+    test_input_grad = gt.gradient(test_output, input_tensor)
+    test_kernel_grad = gt.gradient(test_output, kernel)
+
+    # assert on the difference
+    self.assert_zero_integer_difference(ref_output, test_output)
+    self.assert_zero_integer_difference(ref_input_grad, test_input_grad)
+    self.assert_zero_integer_difference(ref_kernel_grad, test_kernel_grad)
+
+  def run_fp16_dense_test_instance(self, test_shape, **kwargs):
+    """ Runs a half-precision floating-point forward and backward pass test
+    """
+    tf.keras.backend.set_floatx('float16')
+    try:
+      self.run_dense_test_instance(test_shape, dtype=tf.float16, **kwargs)
+    finally:
+      tf.keras.backend.set_floatx('float32')
+
+  def test_basic(self):
+    """ Basic Dense test """
+    self.run_dense_test_instance(test_shape=(1, 8), units=4)
+
+  def test_bigger_batch(self):
+    """ Bigger batch Dense test """
+    self.run_dense_test_instance(test_shape=(2, 4), units=8)
+
+  def test_biased(self):
+    """ Biased Dense test """
+    self.run_dense_test_instance(test_shape=(1, 12), units=8, use_bias=True)
+
+  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  def test_fp16(self):
+    """ Half-precision floating point Dense test """
+    self.run_fp16_dense_test_instance(test_shape=(2, 4), units=8, use_bias=True)

@@ -73,7 +73,6 @@ class CliffordProduct:
     out += l1[i1:] + l2[i2:]
     return s, tuple(out)
 
-
   def apply(self, op, inverse=False):
     """ Applies a multiplicative binary operation in the Clifford product sense.
     If op(i,j) = a[i] * b[j], computes Clifford product.
@@ -109,6 +108,52 @@ class CliffordProduct:
     assert len(lhs) == self.dim, "Number of dimensions does not match in left operand"
     assert len(rhs) == self.dim, "Number of dimensions does not match in right operand"
     return self.apply(lambda i, j: lhs[i] * rhs[j])
+
+  def render_signtable(self):
+    """ Computes the "signtable": description of Clifford product used internally in the engine.
+    Finds the permutation of terms for the backpropagation.
+    """
+    # write out (left index, right index, positive) triples for all terms participating in the product
+    positive_terms = []
+    term_ctr = 0
+    for d in range(self.dim):
+      pos = self.prod_blades == d
+      signs = self.prod_signs[pos]
+      x, y = numpy.where(pos)
+      print("//", d)
+      for i in range(len(signs)):
+        print("{ %d, %d, %s }," % (x[i], y[i], "true" if signs[i] > 0 else "false"))
+        if signs[i] > 0:
+          positive_terms.append((x[i], y[i], term_ctr))
+        term_ctr += 1
+
+    # find backpropagation order
+    def recurse(l, r, order):
+      """ Searches for a sequence of N terms satisfying the backprop order condition (N = algebra dimensionality):
+      "For an N-dim algebra, first N terms need to contribute positively and cover every left and right component."
+      It is assumed such a sequence always exists.
+      :l:     left components included in the order discovered so far
+      :r:     right components included in the order discovered so far
+      :order: the order discovered so far.
+      Returns true once the sequence stored in order satisfies the condition of having every left and right component
+      with positive contribution
+      """
+      if len(l) == self.dim and len(r) == self.dim:
+        # sequence found, print out (including the maining terms)
+        remaining_terms = [i for i in range(self.dim ** 2) if i not in order]
+        strs = [str(i) for i in order + remaining_terms]
+        print(", ".join(strs))
+        return True
+      # some components are not covered. Run them through positive terms
+      for term in positive_terms:
+        # find the one containing left and right parts not yet included
+        if term[0] not in l and term[1] not in r:
+          # recursively process the remaining part
+          if recurse(l + [term[0]], r + [term[1]], order + [term[2]]):
+            return True
+      return False
+    # call
+    recurse([], [], [])
 
 
 class TestCliffordProduct(unittest.TestCase):
