@@ -36,8 +36,10 @@ engine:
 wheel: engine install
 	@cd src/python && $(PYTHON) cythonizer.py bdist_wheel --dist-dir ../../build clean --arch $(ARCH)
 
+# Build libs
+# VERBOSE=1 only prints lines during linking; SHELL='sh -x' allows to print all the expanded lines before executing them.
 build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell find $(SOURCE_PATH) -type f)
-	@cd build && make VERBOSE=$(if $(VERBOSE),1,0) -j`nproc`
+	@cd build && make SHELL=$(if $(VERBOSE),'sh -x','') -j`nproc`
 
 # generates Makefile using CMake
 build/Makefile: FP16 ?= ON

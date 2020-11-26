@@ -46,7 +46,7 @@ message("     Compile flags: ${TENSORFLOW_COMPILE_FLAGS}")
 message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 
 # Enable debug and opitmization flags
-set(COMMON_FLAGS "-fPIC ${OPTIMIZATION_FLAGS} ${VECTORIZATION_FLAGS} -Wfatal-errors")
+set(COMMON_FLAGS "-fPIC -Wfatal-errors")
 # C++11 is required by Tensorflow & PyTorch
 set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
