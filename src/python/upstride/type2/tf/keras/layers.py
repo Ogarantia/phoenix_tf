@@ -123,7 +123,6 @@ class Conv2D(GenericConv2D):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
-               require_input_grad=True,
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(kernel_initializer):
@@ -144,7 +143,6 @@ class Conv2D(GenericConv2D):
                      activity_regularizer=activity_regularizer,
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
-                     require_input_grad=require_input_grad,
                      **kwargs)
     self.upstride_datatype = TYPE2
 
@@ -166,7 +164,6 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
                activity_regularizer=None,
                depthwise_constraint=None,
                bias_constraint=None,
-               require_input_grad=True,
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(depthwise_initializer):
@@ -187,7 +184,6 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         activity_regularizer=activity_regularizer,
         depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
-        require_input_grad=require_input_grad,
         **kwargs)
     self.upstride_datatype = TYPE2
 
@@ -205,7 +201,6 @@ class Dense(GenericDense):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
-               require_input_grad=True,
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(kernel_initializer):
@@ -220,7 +215,6 @@ class Dense(GenericDense):
                      activity_regularizer=activity_regularizer,
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
-                     require_input_grad=require_input_grad,
                      **kwargs)
     self.upstride_datatype = TYPE2
 

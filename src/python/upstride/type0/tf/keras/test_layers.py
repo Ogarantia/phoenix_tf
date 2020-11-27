@@ -297,6 +297,7 @@ class TestDepthwiseConv2D(TestCase):
     model_tf = tf.keras.layers.DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, use_bias=use_bias)
     # Call the models for the first time so that the weights get initialized and can be modified later on
     model_up(inputs)
+    model_up.require_input_grad = True
     model_tf(inputs)
     # Sets weights from the TF model to be equal to the ones on the Phoenix model, up to a transposition
     ref_params = model_up.get_weights()
@@ -342,6 +343,7 @@ class TestDense(TestCase):
     inputs, weights, bias = self.get_inputs_and_filters_dense(batch_size, in_features, out_features, dtype)
     # Declare models
     model_up = Dense(out_features, use_bias=use_bias)
+    model_up.require_input_grad = True
     model_tf = tf.keras.layers.Dense(out_features, use_bias=use_bias)
 
     # Initialize weights so that they exist at the moment that they are going to be modified

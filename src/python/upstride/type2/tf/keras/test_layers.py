@@ -176,7 +176,7 @@ class TestType2Conv2D(TestCase):
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
     upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
-
+    upstride_conv.require_input_grad = True
     upstride_conv(cpp_inputs) # runs a first time to initialize the kernel
     weights = tf.cast(tf.random.uniform(upstride_conv.kernel.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
     if use_bias:
@@ -248,6 +248,7 @@ class TestType2DepthwiseConv2D(TestCase):
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
     # Defines upstride model and initializes weights.
     model_up = DepthwiseConv2D(filter_size, strides, padding, data_format='channels_first', dilation_rate=dilations, bias_initializer='glorot_uniform', use_bias=use_bias)
+    model_up.require_input_grad = True
     model_up(cpp_inputs)
     # Defines model_up.kernel as being equal to depthwise_kernel. It is necessary to use get_gradient_and_output_upstride()
     model_up.kernel = model_up.kernel
@@ -331,6 +332,7 @@ class TestType2Dense(TestCase):
     py_inputs = [tf.random.uniform((batch_size, in_features), dtype=tf.float32, minval=-1, maxval=1) for _ in range(4)]
     cpp_inputs = tf.concat(py_inputs, axis=0)
     model = Dense(out_features, bias_initializer='glorot_uniform', use_bias=use_bias)
+    model.require_input_grad = True
     model(cpp_inputs) # runs a first time to initialize the kernel and the bias, according to use_bias
 
     def cpp_dense(inputs, kernels):

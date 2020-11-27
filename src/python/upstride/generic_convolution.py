@@ -9,8 +9,9 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops, nn
 from tensorflow.python.keras import constraints, initializers, regularizers
 from .type_generic.custom_op import upstride_conv2d
-from .type_generic.tf.keras.layers import TYPE0, append_outermost_dim, upstride_type_to_dimension, CustomInitializer
 from .utils import permutation
+from .type_generic.tf.keras.layers import TYPE0, append_outermost_dim, upstride_type_to_dimension, CustomInitializer, UpstrideLayer
+
 
 
 class Conv2DKernelInitWrapper(CustomInitializer):
@@ -56,7 +57,8 @@ class Conv2DKernelInitWrapper(CustomInitializer):
   def from_config(config):
     return Conv2DKernelInitWrapper(super().from_config(config))
 
-class GenericConv2D(tf.keras.layers.Conv2D):
+
+class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
   def __init__(self,
                filters,
                kernel_size,
@@ -74,7 +76,6 @@ class GenericConv2D(tf.keras.layers.Conv2D):
                activity_regularizer,
                kernel_constraint,
                bias_constraint,
-               require_input_grad,
                **kwargs):
 
     # Handle group convolution in TF prior to TF2.3
@@ -104,9 +105,8 @@ class GenericConv2D(tf.keras.layers.Conv2D):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = None # Value to specify in subclass
+    UpstrideLayer.__init__(self)
     self.upstride_conv_op = upstride_conv2d
-    self.require_input_grad = require_input_grad
 
     # Handling casual paddiing in TF prior to TF2.3
     if version.parse(tf.__version__) < version.parse("2.3"):
@@ -174,6 +174,14 @@ class GenericConv2D(tf.keras.layers.Conv2D):
       return self.activation(output)
     return output
 
+  def compute_mask(self, inputs, previous_mask):
+    """ Overrides compute_mask to intercept the graph and call compute_require_input_grad.
+    The value of self.require_input_grad depends on self.inbound_nodes, which is defined after the
+    method call() is called and before compute_mask() is called.
+    """
+    super().compute_require_input_grad()
+    return super().compute_mask(inputs, previous_mask)
+
   def get_config(self):
     config = super().get_config()
     config["groups"] = self.groups
@@ -198,7 +206,6 @@ class GenericDepthwiseConv2D(GenericConv2D):
                activity_regularizer,
                depthwise_constraint,
                bias_constraint,
-               require_input_grad,
                **kwargs):
 
     # Intercept keras initializer
@@ -222,7 +229,6 @@ class GenericDepthwiseConv2D(GenericConv2D):
         activity_regularizer=activity_regularizer,
         kernel_constraint=None,
         bias_constraint=bias_constraint,
-        require_input_grad=require_input_grad,
         **kwargs)
     self.depth_multiplier = depth_multiplier
     self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer)

@@ -1,11 +1,11 @@
 import tensorflow as tf
 from .type_generic.custom_op import upstride_dense
-from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension
+from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension, UpstrideLayer
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
 
 
-class GenericDense(tf.keras.layers.Dense):
+class GenericDense(tf.keras.layers.Dense, UpstrideLayer):
   def __init__(self,
                units,
                activation,
@@ -17,7 +17,6 @@ class GenericDense(tf.keras.layers.Dense):
                activity_regularizer,
                kernel_constraint,
                bias_constraint,
-               require_input_grad,
                **kwargs):
     super().__init__(units=units,
                      activation=activation,
@@ -30,9 +29,8 @@ class GenericDense(tf.keras.layers.Dense):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = None
+    UpstrideLayer.__init__(self)
     self.upstride_dense_op = upstride_dense
-    self.require_input_grad = require_input_grad
 
   def build(self, input_shape):
     # get number of output dimensions
@@ -82,6 +80,14 @@ class GenericDense(tf.keras.layers.Dense):
     if self.activation is not None:
       return self.activation(output)
     return output
+
+  def compute_mask(self, inputs, previous_mask):
+    """ Overrides compute_mask to intercept the graph and call compute_require_input_grad.
+    The value of self.require_input_grad depends on self.inbound_nodes, which is defined after the
+    method call() is called and before compute_mask() is called.
+    """
+    super().compute_require_input_grad()
+    return super().compute_mask(inputs, previous_mask)
 
   def compute_output_shape(self, input_shape):
     input_shape = tensor_shape.TensorShape(input_shape)

@@ -185,6 +185,7 @@ class Conv2DTestBase(TestBase):
       data_format='channels_first',
       bias_initializer=lambda shape, dtype: tf.squeeze(bias) if use_bias else [],
       **kwargs)
+    test_op.require_input_grad = True
 
     # transpose input to channel first
     input_tensor = transpose_to_channel_first(input_tensor)
@@ -393,6 +394,7 @@ class DenseTestSet(TestBase):
     test_op = self.test_op_class(use_bias=use_bias,
                                  bias_initializer=lambda shape, dtype: tf.squeeze(bias) if use_bias else [],
                                  **kwargs)
+    test_op.require_input_grad = True
 
     # run the test operation once to get it ready
     test_op(tf.zeros_like(input_tensor))

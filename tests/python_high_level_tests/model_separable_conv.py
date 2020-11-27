@@ -8,13 +8,11 @@ def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_fi
   if datatype_int != 0:
     x = framework.TF2Upstride()(x)
 
-  kwargs = {'require_input_grad': False} if upstride else {}
-  
   # Unit 1 - Regular conv
   x = framework.Conv2D(16//factor, 1,
                        padding='same',
                        use_bias=False,
-                       name='conv_1', **kwargs)(x)
+                       name='conv_1')(x)
   x = framework.BatchNormalization()(x)
   x = framework.Activation('relu')(x)
 
