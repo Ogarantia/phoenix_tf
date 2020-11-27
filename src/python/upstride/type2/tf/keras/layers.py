@@ -18,11 +18,7 @@ generic_layers.geometrical_def = (3, 0, 0)
 # If you wish to overwrite some layers, please implements them here
 
 
-class TF2Upstride(Layer):
-  """assume this function is called at the begining of the network. 
-  Select between several strategies, like putting colors to imaginary parts and grayscale in real, ...
-  """
-
+class TF2Upstride(GenericTF2Upstride):
   @staticmethod
   def learn_vector_component(x, channels=3):
     """
@@ -43,66 +39,48 @@ class TF2Upstride(Layer):
     x = tf.keras.layers.Conv2D(channels, (3, 3), padding='same')(x)
     return x
 
-  @staticmethod
-  def rgb_in_img(x: tf.Tensor):
-
+  def rgb_in_img(self, x: tf.Tensor):
+    """ Constructing a quaternion tensor from an RGB image by distributing color channels across the imaginary
+    quaternion components. The real part is set to zero.
+    """
+    assert x.shape[-1] == 3, "Expecting a 3-channel tensor"
     red = tf.expand_dims(x[:, :, :, 0], -1)
     green = tf.expand_dims(x[:, :, :, 1], -1)
     blue = tf.expand_dims(x[:, :, :, 2], -1)
     zeros = tf.zeros_like(red)
     return tf.concat([zeros, red, green, blue], axis=0)
 
-  @staticmethod
-  def gray_in_real_rgb_in_img(x: tf.Tensor):
+  def gray_in_real_rgb_in_img(self, x: tf.Tensor):
+    """ Constructing a quaternion tensor from an RGB image by distributing color channels across the imaginary
+    quaternion components. The real part is set to the average value of color channels.
+    """
+    assert x.shape[-1] == 3, "Expecting a 3-channel tensor"
     red = tf.expand_dims(x[:, :, :, 0], -1)
     green = tf.expand_dims(x[:, :, :, 1], -1)
     blue = tf.expand_dims(x[:, :, :, 2], -1)
     grayscale = tf.image.rgb_to_grayscale(x)
     return tf.concat([grayscale, red, green, blue], axis=0)
 
-  @staticmethod
-  def learn_multivector(x: tf.Tensor):
+  def learn_multivector(self, x: tf.Tensor):
+    """ Constructing a quaternion tensor using a custom learnable mapping from the real input.
+    """
     r = TF2Upstride.learn_vector_component(x, 3)
     i = TF2Upstride.learn_vector_component(x, 3)
     j = TF2Upstride.learn_vector_component(x, 3)
     k = TF2Upstride.learn_vector_component(x, 3)
     return tf.concat([r, i, j, k], axis=0)
 
-  @staticmethod
-  def default_convert(x: tf.Tensor):
-    zeros = tf.zeros_like(x)
-    return tf.concat([x, zeros, zeros, zeros], axis=0)
-
   def __init__(self, strategy=''):
-    STRATEGIES = {
-        'joint': TF2Upstride.rgb_in_img,
-        'grayscale': TF2Upstride.gray_in_real_rgb_in_img,
-        'learned': TF2Upstride.learn_multivector,
-        '': TF2Upstride.default_convert,
-    }
-
-    try:
-      self.strategy = STRATEGIES[strategy]
-    except KeyError:
-      raise ValueError(f"unknown strategy: {strategy}")
-
-  def __call__(self, x):
-    return self.strategy(x)
+    super().__init__(TYPE2, strategy, mappings={
+        'joint': self.rgb_in_img,
+        'grayscale': self.gray_in_real_rgb_in_img,
+        'learned': self.learn_multivector
+    })
 
 
-class Upstride2TF(Layer):
-  """convert multivector back to real values.
-  """
-
-  def __init__(self, strategy='default'):
-    self.concat = True if strategy == "concat" else False
-
-  def __call__(self, x):
-    components = tf.split(x, 4)
-    if self.concat:
-      return tf.concat(components, -1)
-    else:
-      return components[0]
+class Upstride2TF(GenericUpstride2TF):
+  def __init__(self, strategy=''):
+    super().__init__(TYPE2, strategy)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")

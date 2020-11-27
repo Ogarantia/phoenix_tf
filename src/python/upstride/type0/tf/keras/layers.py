@@ -13,26 +13,14 @@ generic_layers.geometrical_def = (0, 0, 0)
 # If you wish to overwrite some layers, please implement them here
 
 
-class TF2Upstride(Layer):
-  """assume this function is called at the begining of the network. 
-  Select between several strategies, like putting colors to imaginary parts and grayscale in real, ...
-
-  this function exists only for compatibility with other types, but it does nothing
-  """
-
+class TF2Upstride(GenericTF2Upstride):
   def __init__(self, strategy=''):
     pass
 
   def __call__(self, x):
     return x
 
-
-class Upstride2TF(Layer):
-  """convert multivector back to real values.
-
-  this function exists only for compatibility with other types, but it does nothing
-  """
-
+class Upstride2TF(GenericUpstride2TF):
   def __init__(self, strategy=''):
     pass
 

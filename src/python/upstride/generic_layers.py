@@ -181,6 +181,7 @@ def geometric_multiplication(cross_product_matrix, inverse=False):
   return output
 
 
+#FIXME: this class is much likely not used
 class BiasLayer(tf.keras.layers.Layer):
   """Keras layer that only adds a bias to the input.
 
@@ -425,3 +426,93 @@ class Dropout(SplittedNonLinear):
 class BatchNormalization(SplittedNonLinear):
   def __init__(self, *argv, **kwargs):
     super().__init__(tf.keras.layers.BatchNormalization, *argv, **kwargs)
+
+
+class GenericTF2Upstride(tf.keras.layers.Layer):
+  """ Base class converting a real-valued tensor to an UpStride datatype-valued tensor.
+  Implements the default mapping strategy filling the first dimension of the output multivector with the input tensor
+  with the rest set to zero. The class constructor accepts a dictionary of custom type-dependent mappings.
+  """
+
+  def default_mapping(self, x: tf.Tensor):
+    """ Default TF2Upstride mapping: puts the input tensor values into the first (likely real) multivector dimension
+    """
+    zeros = tf.zeros_like(x)
+    return tf.concat([x] + [zeros] * (self.dim - 1), axis=0)
+
+  def __init__(self, uptype, mapping='', mappings=None):
+    """ Instantiates TF2Upstride operation.
+    Args:
+        :uptype:    UpStride datatype index
+        :mapping:   the mapping strategy
+        :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
+    """
+    from .type_generic.tf.keras.layers import upstride_type_to_dimension     # FIXME: merge type_generic package and move this import to top
+    self.dim = upstride_type_to_dimension(uptype)
+
+    # build a dictionary of mappings
+    all_mappings = {
+        'default': self.default_mapping,
+        '': self.default_mapping
+    }
+
+    # if provided, add custom mappings
+    if mappings:
+      all_mappings.update(mappings)
+
+    # select the mapping
+    try:
+      self.mapping = all_mappings[mapping]
+    except KeyError:
+      raise ValueError(f"TF2Upstride mapping is not implemented: {mapping}")
+
+  def __call__(self, x):
+    return self.mapping(x)
+
+
+class GenericUpstride2TF(tf.keras.layers.Layer):
+  """ Base class converting an UpStride datatype-valued tensor to a real-valued tensor.
+  Implements two basic mapping strategies ('default' returning the real part of the multivector and 'concat'
+  interpreting a multivector as a set of scalar channels). The class constructor accepts a dictionary of custom
+  type-dependent mappings.
+  """
+
+  def default_mapping(self, x: tf.Tensor):
+    """ Default Upstride2TF mapping: returns real part of the input multivector tensor
+    """
+    return tf.split(x, self.dim)[0]
+
+  def concat_mapping(self, x: tf.Tensor):
+    """ Concatenation Upstride2TF mapping: interprets the multivector tensor as a bigger real-valued tensor.
+    """
+    return tf.concat(tf.split(x, self.dim), -1)
+
+  def __init__(self, uptype, mapping='', mappings=None):
+    """ Instantiates Upstride2TF operation.
+    Args:
+        :uptype:    UpStride datatype index
+        :mapping:   the mapping strategy
+        :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
+    """
+    from .type_generic.tf.keras.layers import upstride_type_to_dimension     # FIXME: merge type_generic package and move this import to top
+    self.dim = upstride_type_to_dimension(uptype)
+
+    # build a dictionary of mappings
+    all_mappings = {
+        'concat' : self.concat_mapping,
+        'default': self.default_mapping,
+        '': self.default_mapping
+    }
+
+    # if provided, add custom mappings
+    if mappings:
+      all_mappings.update(mappings)
+
+    # select the mapping
+    try:
+      self.mapping = all_mappings[mapping]
+    except KeyError:
+      raise ValueError(f"Upstride2TF mapping is not implemented: {mapping}")
+
+  def __call__(self, x):
+    return self.mapping(x)

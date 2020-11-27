@@ -4,36 +4,21 @@ from ....generic_convolution import GenericConv2D, GenericDepthwiseConv2D
 from ....generic_dense import GenericDense
 from ....type_generic.tf.keras.layers import TYPE1
 from .... import generic_layers
+from ....generic_layers import *
 
 generic_layers.upstride_type = 1
 generic_layers.blade_indexes = ["", "12"]
 generic_layers.geometrical_def = (2, 0, 0)
 
-class TF2Upstride(Layer):
-  """assume this function is called at the begining of the network. 
-  Select between several strategies, like putting colors to imaginary parts and grayscale in real, ...
 
-  this function exists only for compatibility with other types, but it does nothing
-  """
-
+class TF2Upstride(GenericTF2Upstride):
   def __init__(self, strategy=''):
-    pass
-
-  def __call__(self, x):
-    return x
+    super().__init__(TYPE1, strategy)
 
 
-class Upstride2TF(Layer):
-  """convert multivector back to real values.
-
-  this function exists only for compatibility with other types, but it does nothing
-  """
-
+class Upstride2TF(GenericUpstride2TF):
   def __init__(self, strategy=''):
-    pass
-
-  def __call__(self, x):
-    return x
+    super().__init__(TYPE1, strategy)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type1")
