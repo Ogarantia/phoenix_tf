@@ -89,7 +89,7 @@ def main():
   train_models = [args.model] if args.model else MODELS.keys()
 
   for i in train_models:
-    model = MODELS[i](framework, args.upstride, args.datatype, factor, dataformat, nclasses=100)
+    model = MODELS[i](framework, args.upstride, args.datatype, factor, nclasses=100)
     if args.print_model_summary:
       model.summary()
 

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_first', input_shape=(3, 32, 32), nclasses=10):
+def Model(framework, upstride, datatype_int=0, factor=1, input_shape=(3, 32, 32), nclasses=10):
   inputs = tf.keras.layers.Input(input_shape)
   x = inputs
 

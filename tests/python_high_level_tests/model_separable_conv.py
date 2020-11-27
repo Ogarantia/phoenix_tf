@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_first', input_shape=(3, 32, 32), nclasses=10):
+def Model(framework, upstride, datatype_int=0, factor=1, input_shape=(3, 32, 32), nclasses=10):
   # set up the model layer by layer
   inputs = tf.keras.layers.Input(input_shape)
   x = inputs
@@ -8,12 +8,15 @@ def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_fi
   if datatype_int != 0:
     x = framework.TF2Upstride()(x)
 
+  # set batch norm axis, given that it is performed along the axis -1 regardless tf.keras.backend.image_data_format()
+  axis = 1 if tf.keras.backend.image_data_format() == "channels_first" else -1
+
   # Unit 1 - Regular conv
   x = framework.Conv2D(16//factor, 1,
                        padding='same',
                        use_bias=False,
                        name='conv_1')(x)
-  x = framework.BatchNormalization()(x)
+  x = framework.BatchNormalization(axis)(x)
   x = framework.Activation('relu')(x)
 
   # Unit 2 - Separable conv
@@ -26,7 +29,7 @@ def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_fi
                        padding='same',
                        use_bias=False,
                        name='conv_2_pw')(x)
-  x = framework.BatchNormalization()(x)
+  x = framework.BatchNormalization(axis)(x)
   x = framework.Activation('relu')(x)
 
   # Unit 3 - Separable conv
@@ -39,7 +42,7 @@ def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_fi
                        padding='same',
                        use_bias=False,
                        name='conv_3_pw')(x)
-  x = framework.BatchNormalization()(x)
+  x = framework.BatchNormalization(axis)(x)
   x = framework.Activation('relu')(x)
 
   # Unit 4 - Separable conv
@@ -52,7 +55,7 @@ def Model(framework, upstride, datatype_int=0, factor=1, dataformat='channels_fi
                        padding='same',
                        use_bias=False,
                        name='conv_4_pw')(x)
-  x = framework.BatchNormalization()(x)
+  x = framework.BatchNormalization(axis)(x)
   x = framework.Activation('relu')(x)
 
   # Unit 5
