@@ -284,8 +284,81 @@ class Conv2DTestSet(Conv2DTestBase):
     self.run_fp16_conv2d_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True)
 
 
+class PointwiseConv2DTestSet(Conv2DTestBase):
+  """ Test set for pointwise Conv2D operation
+  """
+  def setup(self, clifford_product, test_op_class):
+    super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class, 'kernel_initializer')
+
+  def test_basic(self):
+    """ Basic PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1)
+
+  def test_larger_batch(self):
+    """ PointwiseConv2D with larger batch test """
+    self.run_conv2d_test_instance(test_shape=(5, 3, 3, 32), filters=32, kernel_size=1)
+
+  def test_batch_largest(self):
+    """ PointwiseConv2D with batch size as the largest parameter test """
+    self.run_conv2d_test_instance(test_shape=(11, 3, 3, 8), filters=8, kernel_size=1)
+
+  def test_non_square_high(self):
+    """ Non-square high image PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 14, 3, 32), filters=16, kernel_size=1)
+
+  def test_non_square_wide(self):
+    """ Non-square wide image PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 3, 12, 32), filters=16, kernel_size=1)
+
+  def test_irregular_params(self):
+    """ Irregular size parameters PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(7, 11, 5, 3), filters=13, kernel_size=1)
+
+  def test_bias(self):
+    """ Biased PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True)
+
+  def test_bias_larger_batch(self):
+    """ Biased PointwiseConv2D with larger batch test """
+    self.run_conv2d_test_instance(test_shape=(5, 3, 3, 16), filters=32, kernel_size=1, use_bias=True)
+
+  def test_few_filters(self):
+    """ Few filters PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(4, 7, 7, 64), filters=3, kernel_size=1)
+
+  def test_few_input_channels(self):
+    """ Few input channels PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(4, 7, 7, 3), filters=64, kernel_size=1)
+
+  def test_few_channels(self):
+    """ Few channels PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(6, 7, 7, 3), filters=3, kernel_size=1)
+
+  def test_even_height(self):
+    """ Image with even height PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(3, 4, 3, 16), filters=16, kernel_size=1)
+
+  def test_even_width(self):
+    """ Image with even width PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(3, 3, 4, 16), filters=16, kernel_size=1)
+
+  def test_even_image(self):
+    """ Image with even width and height PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(3, 4, 4, 16), filters=16, kernel_size=1)
+
+  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  def test_fp16(self):
+    """ Half-precision floating point PointwiseConv2D test """
+    self.run_fp16_conv2d_test_instance(test_shape=(3, 5, 5, 8), filters=16, kernel_size=1)
+
+  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  def test_fp16_bias(self):
+    """ Half-precision floating point biased PointwiseConv2D test """
+    self.run_fp16_conv2d_test_instance(test_shape=(3, 4, 4, 8), filters=16, kernel_size=1, use_bias=True)
+
+
 class DepthwiseConv2DTestSet(Conv2DTestBase):
-  """ Test set for regular Conv2D operation
+  """ Test set for depthwise Conv2D operation
   """
   def setup(self, clifford_product, test_op_class):
     super().setup(clifford_product, tf.keras.layers.DepthwiseConv2D, test_op_class, 'depthwise_initializer')
@@ -295,40 +368,40 @@ class DepthwiseConv2DTestSet(Conv2DTestBase):
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3)
 
   def test_bigger_batch(self):
-    """ Conv2D with bigger batch test """
+    """ DepthwiseConv2D with bigger batch test """
     self.run_conv2d_test_instance(test_shape=(5, 3, 3, 16), kernel_size=3)
 
   def test_strided(self):
-    """ Strided Conv2D test """
+    """ Strided DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 11, 11, 32), strides=3, kernel_size=4)
 
   def test_dilated(self):
-    """ Dilated Conv2D test """
+    """ Dilated DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), dilation_rate=(2, 3), kernel_size=3)
 
   def test_non_square(self):
-    """ Non-square image Conv2D test """
+    """ Non-square image DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 15, 3, 64), kernel_size=2)
 
   def test_bias(self):
-    """ Biased Conv2D test """
+    """ Biased DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 3, 3, 64), kernel_size=1, use_bias=True)
 
   def test_padded(self):
-    """ Padded Conv2D test """
+    """ Padded DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3, padding='same')
 
   def test_padded_strided(self):
-    """ Padded strided Conv2D test """
+    """ Padded strided DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 7, 7, 16), kernel_size=3, strides=2, padding='same')
 
   def test_padded_dilated(self):
-    """ Padded dilated Conv2D test """
+    """ Padded dilated DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(2, 7, 7, 16), kernel_size=3, dilation_rate=(2, 2), padding='same')
 
   @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
   def test_fp16(self):
-    """ Half-precision floating point Conv2D test """
+    """ Half-precision floating point DepthwiseConv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(2, 3, 3, 4), kernel_size=2, use_bias=True)
 
 

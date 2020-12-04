@@ -1,6 +1,6 @@
 import unittest
 from . import layers
-from ....type_generic.test import setUpModule, Conv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet
+from ....type_generic.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet
 from ....type_generic.clifford_product import CliffordProduct
 
 
@@ -8,6 +8,11 @@ clifford_product = CliffordProduct((2, 0, 0), ["", "12"])
 setUpModule()
 
 class Type1Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, layers.Conv2D)
+
+
+class Type1PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, layers.Conv2D)
 

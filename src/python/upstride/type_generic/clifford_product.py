@@ -19,7 +19,7 @@ class CliffordProduct:
     self.blade_ids = [
         tuple([int(i) for i in entry]) for entry in blade_ids
     ]
-    
+
     # specify algebra
     self.geometrical_def = geometrical_def
     self.dim = len(self.blade_ids)
@@ -100,7 +100,7 @@ class CliffordProduct:
     return output
 
   def __call__(self, lhs, rhs):
-    """ Computes Clifford product 
+    """ Computes Clifford product
     Parameters:
         :lhs: a multivector, left operand of the product
         :rhs: a multivector, right operand of the product
@@ -188,7 +188,6 @@ class TestCliffordProduct(unittest.TestCase):
   def test_quaternion(self):
     """ Quaternion algebra product test
     """
-    # complex numbers may have different definitions
     prod = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
     # quaternion algebra has four dimensions
     self.assertEqual(prod.dim, 4)

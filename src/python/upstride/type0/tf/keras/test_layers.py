@@ -1,7 +1,7 @@
 import unittest
 import tensorflow as tf
 from upstride.type_generic.custom_op import upstride_ops
-from ....type_generic.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
+from ....type_generic.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
 from ....type_generic.clifford_product import CliffordProduct
 from packaging import version
 from .layers import DepthwiseConv2D, Conv2D, Dense
@@ -11,6 +11,11 @@ setUpModule()
 
 
 class Type0Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, Conv2D)
+
+
+class Type0PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, Conv2D)
 

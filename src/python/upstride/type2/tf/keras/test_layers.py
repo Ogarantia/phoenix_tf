@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from ....type_generic.test import setUpModule, Conv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
+from ....type_generic.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
 from ....type_generic.clifford_product import CliffordProduct
 from .... import utils
 
@@ -11,6 +11,11 @@ clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
 setUpModule()
 
 class Type2Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
+  def setUp(self):
+    self.setup(clifford_product, Conv2D)
+
+
+class Type2PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, Conv2D)
 
@@ -166,7 +171,7 @@ class TestType2Conv2DBasic(unittest.TestCase):
 
 
 class TestType2Conv2D(TestCase):
-  """ Implements quaternion convolution unitary testing varying img_size, filter_size, 
+  """ Implements quaternion convolution unitary testing varying img_size, filter_size,
       in_channels, out_channels, padding, strides, dilations and use_bias.
   """
   def run_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, batch_size=3):
@@ -193,7 +198,7 @@ class TestType2Conv2D(TestCase):
       outputs = quaternion_mult_naive(tf_op, inputs, kernels)
       if biases != []:
         outputs = [tf.nn.bias_add(outputs[i], biases[i]) for i in range(len(outputs))]
-      return outputs 
+      return outputs
 
     dinput_test, dkernels_test, dbias_test, output_test = get_gradient_and_output_upstride(cpp_inputs, upstride_conv)
     dinput_ref, dkernels_ref, dbias_ref, output_ref = get_gradient_and_output_tf(py_inputs, py_conv, kernels, bias)
