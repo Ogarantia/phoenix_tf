@@ -1,10 +1,10 @@
 import unittest
 import tensorflow as tf
-from upstride.type_generic.custom_op import upstride_ops
-from ....type_generic.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
-from ....type_generic.clifford_product import CliffordProduct
 from packaging import version
-from .layers import DepthwiseConv2D, Conv2D, Dense
+from upstride.internal.custom_ops import upstride_ops
+from upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
+from upstride.internal.clifford_product import CliffordProduct
+from upstride.type0.tf.keras.layers import DepthwiseConv2D, Conv2D, Dense
 
 clifford_product = CliffordProduct((0, 0, 0), [""])
 setUpModule()

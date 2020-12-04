@@ -1,7 +1,7 @@
 import unittest
-from . import layers
-from ....type_generic.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet
-from ....type_generic.clifford_product import CliffordProduct
+from upstride.type1.tf.keras import layers
+from upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet
+from upstride.internal.clifford_product import CliffordProduct
 
 
 clifford_product = CliffordProduct((2, 0, 0), ["", "12"])

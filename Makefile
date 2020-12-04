@@ -64,8 +64,8 @@ install_wheel: wheel
 
 # copy shared objects side-by-side with Python code
 install:
-	@cp build/libs/libupstride.so src/python/upstride/type_generic
-	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/type_generic
+	@cp build/libs/libupstride.so src/python/upstride/internal
+	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/internal
 
 # build docker with the compilation environment
 dev_docker:

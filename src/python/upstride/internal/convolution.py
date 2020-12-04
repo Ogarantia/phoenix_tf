@@ -1,16 +1,15 @@
 """When working on this file, it can be usefull to have the file /tensorflow/python/keras/layers/convolutional.py open
 """
 
-import six
 from packaging import version
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.ops import array_ops, nn
+from tensorflow.python.ops import array_ops
 from tensorflow.python.keras import constraints, initializers, regularizers
-from .type_generic.custom_op import upstride_conv2d
-from .utils import permutation
-from .type_generic.tf.keras.layers import TYPE0, append_outermost_dim, upstride_type_to_dimension, CustomInitializer, UpstrideLayer
+from upstride.internal.custom_ops import upstride_conv2d
+from upstride.utils import permutation
+from upstride.internal.layers import append_outermost_dim, CustomInitializer, UpstrideLayer
 
 
 

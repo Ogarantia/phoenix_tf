@@ -80,7 +80,7 @@ pipeline {
                 script {
                     docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
                         docker.image(env.BUILD_DEV).inside(){
-                            sh("""python3 test.py""")
+                            sh("""PYTHONPATH=src/python python3 test.py""")
                         }
                     }
                 }
@@ -88,7 +88,7 @@ pipeline {
                 script {
                     docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
                         docker.image(env.BUILD_DEV).inside("--gpus all"){
-                            sh("""CUDA_VISIBLE_DEVICES= python3 test.py""")
+                            sh("""CUDA_VISIBLE_DEVICES= PYTHONPATH=src/python python3 test.py""")
                         }
                     }
                 }

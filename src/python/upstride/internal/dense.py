@@ -1,8 +1,8 @@
 import tensorflow as tf
-from .type_generic.custom_op import upstride_dense
-from .type_generic.tf.keras.layers import append_outermost_dim, upstride_type_to_dimension, UpstrideLayer
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
+from upstride.internal.custom_ops import upstride_dense
+from upstride.internal.layers import append_outermost_dim, UpstrideLayer
 
 
 class GenericDense(tf.keras.layers.Dense, UpstrideLayer):

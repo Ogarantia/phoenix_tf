@@ -1,9 +1,9 @@
-from tensorflow.python.framework import load_library
-from tensorflow.python.platform import resource_loader
-from tensorflow.python.framework import ops
 import tensorflow as tf
-from .tf.keras.layers import TYPE0
+from tensorflow.python.framework import load_library, ops
+from tensorflow.python.platform import resource_loader
+from upstride.internal.layers import TYPE0
 
+# Load shared objects
 load_library.load_op_library(resource_loader.get_path_to_datafile('libdnnl.so.1'))
 upstride_ops = load_library.load_op_library(resource_loader.get_path_to_datafile('libupstride.so'))
 

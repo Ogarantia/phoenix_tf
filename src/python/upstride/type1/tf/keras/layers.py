@@ -1,28 +1,24 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
-from ....generic_convolution import GenericConv2D, GenericDepthwiseConv2D
-from ....generic_dense import GenericDense
-from ....type_generic.tf.keras.layers import TYPE1
-from .... import generic_layers
-from ....generic_layers import *
+from upstride.internal import convolution, dense, layers
+from upstride.internal.layers import *
 
-generic_layers.upstride_type = 1
-generic_layers.blade_indexes = ["", "12"]
-generic_layers.geometrical_def = (2, 0, 0)
+layers.upstride_type = 1
+layers.blade_indexes = ["", "12"]
+layers.geometrical_def = (2, 0, 0)
 
 
-class TF2Upstride(GenericTF2Upstride):
+class TF2Upstride(layers.GenericTF2Upstride):
   def __init__(self, strategy=''):
-    super().__init__(TYPE1, strategy)
+    super().__init__(layers.TYPE1, strategy)
 
 
-class Upstride2TF(GenericUpstride2TF):
+class Upstride2TF(layers.GenericUpstride2TF):
   def __init__(self, strategy=''):
-    super().__init__(TYPE1, strategy)
+    super().__init__(layers.TYPE1, strategy)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type1")
-class Conv2D(GenericConv2D):
+class Conv2D(convolution.GenericConv2D):
   def __init__(self, filters,
                kernel_size,
                strides=(1, 1),
@@ -57,11 +53,11 @@ class Conv2D(GenericConv2D):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = TYPE1
+    self.upstride_datatype = layers.TYPE1
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type1")
-class DepthwiseConv2D(GenericDepthwiseConv2D):
+class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
   def __init__(self,
                kernel_size,
                strides=(1, 1),
@@ -96,11 +92,11 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
         **kwargs)
-    self.upstride_datatype = TYPE1
+    self.upstride_datatype = layers.TYPE1
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type1")
-class Dense(GenericDense):
+class Dense(dense.GenericDense):
   def __init__(self,
                units,
                activation=None,
@@ -124,4 +120,4 @@ class Dense(GenericDense):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = TYPE1
+    self.upstride_datatype = layers.TYPE1

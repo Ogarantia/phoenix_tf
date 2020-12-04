@@ -29,6 +29,9 @@ def framework_mapping(upstride_bool, datatype_int):
   elif datatype_int == 2: # type2 upstride (phoenix OR python)
     import upstride.type2.tf.keras.layers as up
     factor = 4
+  elif datatype_int == 3: # type3 upstride (phoenix OR python)
+    import upstride.type3.tf.keras.layers as up
+    factor = 4
   else:
     raise ValueError("The datatype_int chosen is not implemented.")
 

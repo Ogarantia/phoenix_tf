@@ -116,7 +116,7 @@ setup(
     url="https://upstride.io",
     include_package_data=True,
     packages=['upstride'],
-    package_dir={'upstride': 'upstride/type_generic'},
+    package_dir={'upstride': 'upstride/internal'},
     package_data={'upstride': ['libupstride.so', 'libdnnl.so.1']},
     classifiers=[
         "Programming Language :: Python :: 3",

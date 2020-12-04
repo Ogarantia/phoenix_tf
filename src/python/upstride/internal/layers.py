@@ -5,11 +5,34 @@ import inspect
 from typing import List, Tuple
 import tensorflow as tf
 
+# algebra identification
+TYPE0 = 0
+TYPE1 = 1
+TYPE2 = 2
+TYPE3 = 3
 
-# Definition of the GA, setup when upstride.type{1/2/3}.calling tf.keras.layers
-upstride_type = 3
-blade_indexes = ["", "1", "2", "3", "12", "13", "23", "123"]
-geometrical_def = (3, 0, 0)
+# FIXME: check use, consider removing; comment if still necessary
+blade_indexes = None
+geometrical_def = None
+
+
+@functools.lru_cache(maxsize=1)
+def upstride_type_to_dimension(type):
+  """ Returns dimensionality of a specific algebra
+  """
+  dimensions = {
+      TYPE0: 1,
+      TYPE1: 2,
+      TYPE2: 4,
+      TYPE3: 8
+  }
+  return dimensions[type]
+
+
+def append_outermost_dim(type, shape):
+  """ Adds to a tensor shape the outermost dimension matching a specific algebra dimension, if needed
+  """
+  return shape if type == TYPE0 else (upstride_type_to_dimension(type),) + shape
 
 
 def change_upstride_type(new_upstride_type, new_blade_indexes,  new_geometrical_def):
@@ -149,6 +172,7 @@ def get_layers(layer: tf.keras.layers.Layer, *argv, **kwargs) -> Tuple[List[tf.k
 
   return layers, add_bias, bias_parameters
 
+
 def compute_all_cross_product(layers, inputs):
   layers_outputs = []
   for i in range(multivector_length()):
@@ -180,6 +204,51 @@ def geometric_multiplication(cross_product_matrix, inverse=False):
           output[k] -= cross_product_matrix[i][j]
   return output
 
+
+class UpstrideLayer:
+  """ This class regroups the methods and attributes common to all Upstride layers.
+  Hence, all Upstride layers are expected to inherit from UpstrideLayer.
+  """
+  def __init__(self):
+    """ Defines the attributes common to all Upstride layers.
+    """
+    self.upstride_datatype = None # Value to specify in subclass
+    self.require_input_grad = None
+
+  # TODO consider parsing the graph from the input to the children - rather than from the current node to
+  # its parents -, as detailed at
+  # https://bitbucket.org/upstride/phoenix_tf/pull-requests/59/feature-pe-170-compute-input-grad#comment-190697967
+  def compute_require_input_grad(self):
+    """ Sets self.require_input_grad to False iff none of the the parent_nodes (recursively)
+    of the inbound_nodes have trainable_weights, in which case the input gradient is not used.
+    """
+    def have_trainable_weights(parent_nodes):
+      """ Recursive function that parses all the parent nodes looking for their trainable_weights.
+      Returns False if all the parent nodes have no trainable weights. Otherwise, returns True.
+      """
+      for parent_node in parent_nodes:
+        if parent_node.layer.trainable_weights != []:
+          return True
+        else:
+          return have_trainable_weights(parent_node.parent_nodes)
+      return False
+
+    # If require_input_grad has not been computed, then inspect the graph to determine if it is required
+    if self.require_input_grad is None:
+      self.require_input_grad = False
+      for inbound_node in self._inbound_nodes:
+        if have_trainable_weights(inbound_node.parent_nodes):
+          self.require_input_grad = True
+          break
+
+
+class CustomInitializer(tf.keras.initializers.Initializer):
+  """ Base class for Upstride initializers.
+  Standard keras initializers may change the underlying distribution parameters depending on tensor shapes.
+  To apply them to multidimensional UpStride datatypes, interception mechanisms are implemented. All the internal
+  initializers are assumed to be derived from this class to make sure the interception mechanics works correctly.
+  """
+  pass
 
 #FIXME: this class is much likely not used
 class BiasLayer(tf.keras.layers.Layer):
@@ -447,7 +516,6 @@ class GenericTF2Upstride(tf.keras.layers.Layer):
         :mapping:   the mapping strategy
         :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
     """
-    from .type_generic.tf.keras.layers import upstride_type_to_dimension     # FIXME: merge type_generic package and move this import to top
     self.dim = upstride_type_to_dimension(uptype)
 
     # build a dictionary of mappings
@@ -494,7 +562,6 @@ class GenericUpstride2TF(tf.keras.layers.Layer):
         :mapping:   the mapping strategy
         :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
     """
-    from .type_generic.tf.keras.layers import upstride_type_to_dimension     # FIXME: merge type_generic package and move this import to top
     self.dim = upstride_type_to_dimension(uptype)
 
     # build a dictionary of mappings

@@ -1,7 +1,6 @@
 import unittest
 import tensorflow as tf
-import numpy as np
-from .. import utils
+from upstride import utils
 
 def setUpModule():
   """ Prepares the test module to be executed.
@@ -12,7 +11,7 @@ def setUpModule():
   for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
   # call a dummy function to get cuDNN handle created
-  from .custom_op import upstride_ops
+  from upstride.internal.custom_ops import upstride_ops
   upstride_ops.wait()
 
 def transpose_to_channel_first(tensor):

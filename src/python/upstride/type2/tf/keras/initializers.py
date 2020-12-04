@@ -7,10 +7,8 @@ Implementation is done following this open-source:
 
 
 import numpy as np
-from numpy.random import RandomState
 import tensorflow as tf
-import math
-from ....type_generic.tf.keras.layers import CustomInitializer
+from upstride.internal.layers import CustomInitializer
 
 
 class QInitializer(CustomInitializer):
@@ -47,7 +45,7 @@ class QInitializer(CustomInitializer):
     shape = shape[1:]
 
     # init magnitude and phase
-    rng = RandomState(self.seed)
+    rng = np.random.RandomState(self.seed)
     magnitude = rng.rayleigh(scale=scale, size=shape)
     phase = rng.uniform(low=-np.pi, high=np.pi, size=shape)
 

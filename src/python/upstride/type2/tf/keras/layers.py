@@ -2,23 +2,19 @@ from typing import Dict
 
 import tensorflow as tf
 from tensorflow.keras import initializers
-from tensorflow.keras.layers import Layer
 from tensorflow.python.keras.utils import conv_utils, tf_utils
-from upstride.generic_convolution import GenericConv2D, GenericDepthwiseConv2D
-from upstride.generic_dense import GenericDense
-from upstride.type_generic.tf.keras.layers import TYPE2
-from .... import generic_layers
-from ....generic_layers import *
-from .initializers import is_type2_init, QInitializerConv, QInitializerDepthwiseConv, QInitializerDense
+from upstride.type2.tf.keras.initializers import is_type2_init, QInitializerConv, QInitializerDepthwiseConv, QInitializerDense
+from upstride.internal import convolution, dense, layers
+from upstride.internal.layers import *
 
-generic_layers.upstride_type = 2
-generic_layers.blade_indexes = ["", "12", "23", "13"]
-generic_layers.geometrical_def = (3, 0, 0)
+layers.upstride_type = 2
+layers.blade_indexes = ["", "12", "23", "13"]
+layers.geometrical_def = (3, 0, 0)
 
 # If you wish to overwrite some layers, please implements them here
 
 
-class TF2Upstride(GenericTF2Upstride):
+class TF2Upstride(layers.GenericTF2Upstride):
   @staticmethod
   def learn_vector_component(x, channels=3):
     """
@@ -71,20 +67,20 @@ class TF2Upstride(GenericTF2Upstride):
     return tf.concat([r, i, j, k], axis=0)
 
   def __init__(self, strategy=''):
-    super().__init__(TYPE2, strategy, mappings={
+    super().__init__(layers.TYPE2, strategy, mappings={
         'joint': self.rgb_in_img,
         'grayscale': self.gray_in_real_rgb_in_img,
         'learned': self.learn_multivector
     })
 
 
-class Upstride2TF(GenericUpstride2TF):
+class Upstride2TF(layers.GenericUpstride2TF):
   def __init__(self, strategy=''):
-    super().__init__(TYPE2, strategy)
+    super().__init__(layers.TYPE2, strategy)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class Conv2D(GenericConv2D):
+class Conv2D(convolution.GenericConv2D):
   def __init__(self, filters,
                kernel_size,
                strides=(1, 1),
@@ -122,10 +118,10 @@ class Conv2D(GenericConv2D):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = TYPE2
+    self.upstride_datatype = layers.TYPE2
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class DepthwiseConv2D(GenericDepthwiseConv2D):
+class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
   def __init__(self,
                kernel_size,
                strides=(1, 1),
@@ -163,11 +159,11 @@ class DepthwiseConv2D(GenericDepthwiseConv2D):
         depthwise_constraint=depthwise_constraint,
         bias_constraint=bias_constraint,
         **kwargs)
-    self.upstride_datatype = TYPE2
+    self.upstride_datatype = layers.TYPE2
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class Dense(GenericDense):
+class Dense(dense.GenericDense):
   def __init__(self,
                units,
                activation=None,
@@ -194,11 +190,11 @@ class Dense(GenericDense):
                      kernel_constraint=kernel_constraint,
                      bias_constraint=bias_constraint,
                      **kwargs)
-    self.upstride_datatype = TYPE2
+    self.upstride_datatype = layers.TYPE2
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class MaxNormPooling2D(Layer):
+class MaxNormPooling2D(tf.keras.layers.Layer, layers.UpstrideLayer):
   """ Max Pooling layer for quaternions which considers the norm of quaternions to choose the quaternions
   which exhibits maximum norm within a small window of pool size.
   Arguments:
@@ -390,7 +386,7 @@ def quaternion_bn(input_centred, v: Dict, beta, gamma: Dict, axis=-1):
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class BatchNormalizationQ(Layer):
+class BatchNormalizationQ(tf.keras.layers.Layer, layers.UpstrideLayer):
   """
   quaternion implementation : https://github.com/gaudetcj/DeepQuaternionNetworks/blob/43b321e1701287ce9cf9af1eb16457bdd2c85175/quaternion_layers/bn.py
   tf implementation : https://github.com/tensorflow/tensorflow/blob/2b96f3662bd776e277f86997659e61046b56c315/tensorflow/python/keras/layers/normalization.py#L46

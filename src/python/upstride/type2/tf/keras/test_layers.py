@@ -1,10 +1,10 @@
 import unittest
 import tensorflow as tf
 import numpy as np
-from .layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from ....type_generic.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
-from ....type_generic.clifford_product import CliffordProduct
-from .... import utils
+from upstride.type2.tf.keras.layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
+from upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
+from upstride.internal.clifford_product import CliffordProduct
+from upstride import utils
 
 
 clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])

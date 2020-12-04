@@ -1,5 +1,4 @@
-from typing import List, Tuple
-import functools
+from typing import Tuple
 import numpy
 import unittest
 
