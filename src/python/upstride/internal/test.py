@@ -2,8 +2,10 @@ import unittest
 import tensorflow as tf
 from upstride import utils
 
+
 def setUpModule():
   """ Prepares the test module to be executed.
+
   Running tests without preparation may cause a cuDNN crash (dunno why).
   """
   # allow memory growth
@@ -14,6 +16,14 @@ def setUpModule():
   from upstride.internal.custom_ops import upstride_ops
   upstride_ops.wait()
 
+
+def gpu_visible():
+  """ Returns True if TF sees GPU
+  """
+  # good old tf.test.gpu_device_name() segfaults when called in unittest decorator before fp16 tests. Yep.
+  return tf.config.list_physical_devices('GPU') != []
+
+
 def transpose_to_channel_first(tensor):
   """ Transposes a tensor from channel last to channel first format
   """
@@ -21,16 +31,58 @@ def transpose_to_channel_first(tensor):
   permutation = [0, rank - 1] + list(range(1, rank - 1))
   return tf.transpose(tensor, permutation)
 
-def random_integer_tensor(shape, dtype=None):
+
+def random_integer_tensor(shape, dtype=tf.float32):
   """ Generates a random tensor containing integer values
   """
   tensor = tf.random.uniform(shape, -4, +4, dtype=tf.int32)
-  return tf.cast(tensor, dtype or tf.float32)
+  return tf.cast(tensor, dtype)
+
+
+def random_float_tensor(shape, dtype=tf.float32):
+  """ Generates a random tensor containing float values
+  """
+  tensor = tf.random.uniform(shape, -4, +4, dtype=tf.float32)
+  return tf.cast(tensor, dtype)
+
 
 def apply_some_non_linearity(x):
   """ Applies some non linearity to the input x so that the unitary tests are robust wrt to the gradient.
+
+  >>> x = tf.constant([-2.5, -0.5, 0, 0.5, 2.5])
+  >>> x_applied = apply_some_non_linearity(x)
+  >>> x_applied_ref = tf.constant([2, 0.125, 0, 0.125, 2])
+  >>> bool(tf.reduce_all(x_applied == x_applied_ref))
+  True
   """
   return tf.where(tf.math.abs(x) > 1, tf.math.abs(x) - 0.5, 0.5*x**2)
+
+
+def assert_positive_range(tensor, threshold=0.9):
+  """ Asserts on a positive range of a tensor, i.e., its values have some meaningful diversity
+  """
+  if tf.size(tensor[0]) > 1:
+    rng = tf.reduce_max(tensor) - tf.reduce_min(tensor)
+    assert rng.numpy() > threshold
+
+
+def assert_zero_integer_difference(tensor1, tensor2):
+  """ Asserts integer tensors are equal after rounding
+  """
+  assert_positive_range(tensor1)
+  diff = tf.round(tensor1 - tensor2)
+  diff = tf.reduce_sum(diff)
+  assert diff.numpy() == 0
+
+
+def assert_small_float_difference(tensor1, tensor2, relative_error_threshold):
+  """ Asserts float tensors differ by no more than threshold scaled by the values checked
+  """
+  abs_diff = tf.abs(tensor1 - tensor2)
+  abs_max_tensors = tf.abs(tf.maximum(tensor1, tensor2))
+  threshold = relative_error_threshold * (1 + abs_max_tensors)
+  assert tf.reduce_all(abs_diff < threshold)
+
 
 class CliffordProductLayer(tf.keras.layers.Layer):
   """ Wraps a keras multiplicative operation to be applied within Clifford product
@@ -90,30 +142,24 @@ class TestCase(unittest.TestCase):
     self.assertLess(err, threshold, f"Absolute {variable} difference with the reference is too big: {err}")
     print(f'[{function}] Absolute {variable} difference:', err.numpy())
 
+
 class TestBase:
   """ Basic class for tests containing handy utilities
   """
-  def assert_positive_range(self, tensor, threshold):
-    """ Asserts on a positive range of a tensor, i.e., its values have some meaningful diversity
-    """
-    rng = tf.reduce_max(tensor) - tf.reduce_min(tensor)
-    self.assertGreater(rng.numpy(), threshold)
+  def setup(self, dtype=tf.int32):
+    self.dtype = dtype
+    self.random_tensor = random_integer_tensor if dtype is tf.int32 else random_float_tensor
 
-  def assert_zero_integer_difference(self, tensor1, tensor2):
-    self.assert_positive_range(tensor1, 0.9)
-    diff = tf.round(tensor1 - tensor2)
-    diff = tf.reduce_sum(diff)
-    self.assertEqual(diff.numpy(), 0)
+  def assert_equal_tensors(self, tensor1, tensor2):
+    if self.dtype is tf.int32:
+      assert_zero_integer_difference(tensor1, tensor2)
+    else:
+      RELATIVE_ERROR_THRESHOLD = 2e-3
+      assert_small_float_difference(tensor1, tensor2, RELATIVE_ERROR_THRESHOLD)
 
-  @staticmethod
-  def uses_gpu():
-    """ Returns True if TF uses GPU
-    """
-    # good old tf.test.gpu_device_name() segfaults when called in unittest decorator before fp16 tests. Yep.
-    return tf.config.list_physical_devices('GPU') != []
 
 class Conv2DTestBase(TestBase):
-  def setup(self, clifford_product, ref_op_class, test_op_class, kernel_initializer):
+  def setup(self, clifford_product, ref_op_class, test_op_class, kernel_initializer, dtype=tf.int32):
     """ Type-agnostic convolution forward and backward pass test set
     :clifford_product:    Clifford product specification defining the algebra being tested
     :ref_op_class:        reference scalar operation class, e.g. tf.keras.layers.Conv2D
@@ -121,6 +167,7 @@ class Conv2DTestBase(TestBase):
     :kernel_initializer:  argument name to pass to the layer, 'kernel_initializer' or 'depthwise_initializer'
                           depending on which convolution operation is used
     """
+    super().setup(dtype)
     self.clifford_product = clifford_product
     self.ref_op_class = ref_op_class
     self.test_op_class = test_op_class
@@ -138,16 +185,16 @@ class Conv2DTestBase(TestBase):
     assert 'data_format' not in kwargs, 'data_format option is not supported in this test'
 
     # generate channel-last random input
-    input_tensor = random_integer_tensor((test_shape[0] * self.clifford_product.dim,) + test_shape[1:], dtype=dtype)
+    input_tensor = self.random_tensor((test_shape[0] * self.clifford_product.dim,) + test_shape[1:], dtype=dtype)
 
     # prepare bias
     use_bias = kwargs.pop('use_bias', False)
     if use_bias:
       bias_length = kwargs.get('filters', test_shape[-1])
-      bias = random_integer_tensor((self.clifford_product.dim, bias_length), dtype=dtype)
+      bias = self.random_tensor((self.clifford_product.dim, bias_length), dtype=dtype)
 
     # construct reference operation
-    kwargs[self.kernel_initializer] = random_integer_tensor
+    kwargs[self.kernel_initializer] = self.random_tensor
     ref_op = CliffordProductLayer(self.clifford_product, self.ref_op_class,
       data_format='channels_last',
       **kwargs)
@@ -212,9 +259,9 @@ class Conv2DTestBase(TestBase):
     ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", "nOIHW"))
 
     # assert on the difference
-    self.assert_zero_integer_difference(ref_output, test_output)
-    self.assert_zero_integer_difference(ref_input_grad, test_input_grad)
-    self.assert_zero_integer_difference(ref_kernel_grad, test_kernel_grad)
+    self.assert_equal_tensors(ref_output, test_output)
+    self.assert_equal_tensors(ref_input_grad, test_input_grad)
+    self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
   def run_fp16_conv2d_test_instance(self, test_shape, **kwargs):
     """ Runs a half-precision floating-point forward and backward pass test
@@ -272,12 +319,13 @@ class Conv2DTestSet(Conv2DTestBase):
     """ Padded dilated Conv2D test """
     self.run_conv2d_test_instance(test_shape=(2, 7, 7, 16), filters=32, kernel_size=3, dilation_rate=(2, 2), padding='same')
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "grouped conv not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "grouped conv not supported on CPU")
+  @unittest.skipIf(tf.version.VERSION < '2.3.0', "tensorflow version needs to be at least 2.3.0")
   def test_grouped(self):
     """ Group Conv2D test """
     self.run_conv2d_test_instance(test_shape=(1, 5, 5, 64), filters=48, groups=4, kernel_size=3)
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16(self):
     """ Half-precision floating point Conv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True)
@@ -288,6 +336,10 @@ class PointwiseConv2DTestSet(Conv2DTestBase):
   """
   def setup(self, clifford_product, test_op_class):
     super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class, 'kernel_initializer')
+
+  def test_minimal(self):
+    """ Minimal PointwiseConv2D test """
+    self.run_conv2d_test_instance(test_shape=(1, 1, 1, 1), filters=1, kernel_size=1)
 
   def test_basic(self):
     """ Basic PointwiseConv2D test """
@@ -345,12 +397,12 @@ class PointwiseConv2DTestSet(Conv2DTestBase):
     """ Image with even width and height PointwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(3, 4, 4, 16), filters=16, kernel_size=1)
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16(self):
     """ Half-precision floating point PointwiseConv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(3, 5, 5, 8), filters=16, kernel_size=1)
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16_bias(self):
     """ Half-precision floating point biased PointwiseConv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(3, 4, 4, 8), filters=16, kernel_size=1, use_bias=True)
@@ -398,18 +450,19 @@ class DepthwiseConv2DTestSet(Conv2DTestBase):
     """ Padded dilated DepthwiseConv2D test """
     self.run_conv2d_test_instance(test_shape=(2, 7, 7, 16), kernel_size=3, dilation_rate=(2, 2), padding='same')
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16(self):
     """ Half-precision floating point DepthwiseConv2D test """
     self.run_fp16_conv2d_test_instance(test_shape=(2, 3, 3, 4), kernel_size=2, use_bias=True)
 
 
 class DenseTestSet(TestBase):
-  def setup(self, clifford_product, test_op_class):
+  def setup(self, clifford_product, test_op_class, dtype=tf.int32):
     """ Type-agnostic Dense forward and backward pass test set
     :clifford_product:    Clifford product specification defining the algebra being tested
     :test_op_class:       test Dense operation class implementing the convolution for the algebra being tested
     """
+    super().setup(dtype)
     self.clifford_product = clifford_product
     self.test_op_class = test_op_class
 
@@ -422,15 +475,15 @@ class DenseTestSet(TestBase):
     assert 'bias_initializer' not in kwargs, 'bias_initializer option is not supported in this test'
 
     # generate channel-last random input
-    input_tensor = random_integer_tensor((test_shape[0] * self.clifford_product.dim,) + test_shape[1:], dtype=dtype)
+    input_tensor = self.random_tensor((test_shape[0] * self.clifford_product.dim,) + test_shape[1:], dtype=dtype)
 
     # prepare bias
     use_bias = kwargs.pop('use_bias', False)
     if use_bias:
-      bias = random_integer_tensor((self.clifford_product.dim, kwargs.get('units')), dtype=dtype)
+      bias = self.random_tensor((self.clifford_product.dim, kwargs.get('units')), dtype=dtype)
 
     # construct reference operation
-    kwargs['kernel_initializer'] = random_integer_tensor
+    kwargs['kernel_initializer'] = self.random_tensor
     ref_op = CliffordProductLayer(self.clifford_product, tf.keras.layers.Dense, **kwargs)
 
     # run once to get it ready
@@ -486,9 +539,9 @@ class DenseTestSet(TestBase):
     test_kernel_grad = gt.gradient(test_output, kernel)
 
     # assert on the difference
-    self.assert_zero_integer_difference(ref_output, test_output)
-    self.assert_zero_integer_difference(ref_input_grad, test_input_grad)
-    self.assert_zero_integer_difference(ref_kernel_grad, test_kernel_grad)
+    self.assert_equal_tensors(ref_output, test_output)
+    self.assert_equal_tensors(ref_input_grad, test_input_grad)
+    self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
   def run_fp16_dense_test_instance(self, test_shape, **kwargs):
     """ Runs a half-precision floating-point forward and backward pass test
@@ -511,7 +564,7 @@ class DenseTestSet(TestBase):
     """ Biased Dense test """
     self.run_dense_test_instance(test_shape=(1, 12), units=8, use_bias=True)
 
-  @unittest.skipIf(not TestBase.uses_gpu(), "fp16 not supported on CPU")
+  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16(self):
     """ Half-precision floating point Dense test """
     self.run_fp16_dense_test_instance(test_shape=(2, 4), units=8, use_bias=True)

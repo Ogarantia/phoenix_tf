@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 from upstride.type2.tf.keras.layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
 from upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase, apply_some_non_linearity
+from upstride.internal.test_exhaustive import PointwiseConv2DExhaustiveTestSet
 from upstride.internal.clifford_product import CliffordProduct
 from upstride import utils
 
@@ -18,6 +19,11 @@ class Type2Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
 class Type2PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, Conv2D)
+
+
+class TestSetType2PointwiseConv2DExhaustive(PointwiseConv2DExhaustiveTestSet):
+  def setup(self):
+    super().setup(clifford_product, Conv2D)
 
 
 class Type2DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
