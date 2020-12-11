@@ -47,8 +47,8 @@ message("     Link flags:    ${TENSORFLOW_LINK_FLAGS}")
 
 # Enable debug and opitmization flags
 set(COMMON_FLAGS "-fPIC -Wfatal-errors")
-# C++11 is required by Tensorflow & PyTorch
-set(CMAKE_CXX_FLAGS "-std=c++11 ${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
+# The C++ standard required by TF is already set in CMAKE_CXX_FLAGS in core
+set(CMAKE_CXX_FLAGS "${TENSORFLOW_COMPILE_FLAGS} ${TENSORFLOW_LINK_FLAGS} ${COMMON_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 # MacOS-specific directive
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
