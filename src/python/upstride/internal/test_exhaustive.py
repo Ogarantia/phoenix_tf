@@ -32,7 +32,7 @@ class PointwiseConv2DExhaustiveTestSet(Conv2DTestBase):
   ])
   def test_pointwise_mobilenetv2_224_configs(self, img_side_length, input_channels, output_channels):
     """ PointwiseConv2D test exploring convolution configurations used in MobileNetV2 for images 224 x 224 x 3 """
-    self.run_conv2d_test_instance(
+    self.run_test_instance(
       test_shape=(self.DEFAULT_BATCH_SIZE, img_side_length, img_side_length, input_channels),
       filters=output_channels,
       kernel_size=1,

@@ -132,7 +132,7 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/bin/g++8.4  100
 
 - Run `make GPU=ON` (or `make GPU=OFF`) in its root to compile the Engine
 
-If you have CUDA 10.1, you may run into a cublas-related compilation issue. This is because CUDA 10.1 is shipped with libcublas 10.2 version which is located in a different folder, and even the newest CMake at the moment of writing is unable to find it. In this case you may need to point cublas location explicitly doing something like 
+If you have CUDA 10.1, you may run into a cublas-related compilation issue. This is because CUDA 10.1 is shipped with libcublas 10.2 version which is located in a different folder, and even the newest CMake at the moment of writing is unable to find it. In this case you may need to point cublas location explicitly doing something like
 ```bash
 export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:/usr/local/cuda-10.2/include
 export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/cuda-10.2/lib64
@@ -161,3 +161,19 @@ Enable verbose mode when training a quaternion network with separable convolutio
 ```bash
 UPSTRIDE_VERBOSE=1 python3 tests/python_high_level_tests/train_model.py -m model_separable_conv -d 2 -e 10
 ```
+
+### Tests
+
+- Useful options to try with ‘python3 test.py’:
+
+  - -v : prints pytest verbose information (like names of the tests and progress in percentage)
+  - -s : captures stdout and prints it to the terminal
+  - -k Conv2D : run only tests with 'Conv2D' in their name
+  - -k “Type2 and Pointwise and minimal“ : run only tests with ‘Type2’, ‘Pointwise’ AND ‘minimal’ in their names. Regex expressions using ‘and’, ‘or’, ‘not’ and parentheses are supported.
+  - -m slow : run only tests marked with ‘slow’
+  - -m “not slow” : run only tests not marked with ‘slow’. Same regex expressions supported as with -k.
+  - -m ““ : run all tests
+  - -m none : run only tests marked with ‘none’ (likely none)
+  - --durations=10 : show 10 slowest tests
+  - --durations=10 --durations-min=1.0 : show 10 slowest tests which take at least 1 second
+  - --tb=short : show short error messages (only call stack)
