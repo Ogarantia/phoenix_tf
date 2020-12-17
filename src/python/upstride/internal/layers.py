@@ -480,7 +480,7 @@ class SplittedNonLinear:
     # get_layers is needed for changing the name of the layer if defined by the user
     self.layers, _, _ = get_layers(layer, *argv, **kwargs)
 
-  def __call__(self, inputs):
+  def __call__(self, inputs, **kwargs):
     inputs = tf.split(inputs, len(blade_indexes))
     outputs = [self.layers[i](inputs[i]) for i in range(len(blade_indexes))]
     outputs = tf.concat(outputs, 0)
