@@ -227,19 +227,37 @@ class UpstrideLayer:
       Returns False if all the parent nodes have no trainable weights. Otherwise, returns True.
       """
       for parent_node in parent_nodes:
-        if parent_node.layer.trainable_weights != []:
-          return True
+        # In TF v2.2, parent_node.inbound_layers is either a list or a layer.
+        # The following if-statement standardizes into a list
+        if isinstance(parent_node.inbound_layers, list):
+          inbound_layers = parent_node.inbound_layers
         else:
-          return have_trainable_weights(parent_node.parent_nodes)
+          inbound_layers = [parent_node.inbound_layers]
+
+        for inbound_layer in inbound_layers:
+          if parent_node.inbound_layers.trainable_weights != []:
+            return True
+          else:
+            parent_nodes = inbound_layer.inbound_nodes
+            return have_trainable_weights(parent_nodes)
       return False
 
     # If require_input_grad has not been computed, then inspect the graph to determine if it is required
     if self.require_input_grad is None:
       self.require_input_grad = False
       for inbound_node in self._inbound_nodes:
-        if have_trainable_weights(inbound_node.parent_nodes):
-          self.require_input_grad = True
-          break
+        # In TF v2.2, parent_node.inbound_layers is either a list or a layer.
+        # The following if-statement standardizes into a list
+        if isinstance(inbound_node.inbound_layers, list):
+          inbound_layers = inbound_node.inbound_layers
+        else:
+          inbound_layers = [inbound_node.inbound_layers]
+
+        for inbound_layer in inbound_layers:
+          parent_nodes = inbound_layer.inbound_nodes
+          if have_trainable_weights(parent_nodes):
+            self.require_input_grad = True
+            break
 
 
 class CustomInitializer(tf.keras.initializers.Initializer):

@@ -106,7 +106,7 @@ def main():
 
 
       # run training
-      tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir=args.logdir, histogram_freq=1, profile_batch=[2, 5], write_graph=False, write_images=False)
+      tensorboard_cb = tf.keras.callbacks.TensorBoard(log_dir=args.logdir, histogram_freq=1, profile_batch="2, 5", write_graph=False, write_images=False)
       model.compile(optimizer=tf.keras.optimizers.Adam(),
                     loss='sparse_categorical_crossentropy',
                     metrics=['accuracy'])
