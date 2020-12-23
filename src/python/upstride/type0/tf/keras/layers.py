@@ -8,15 +8,15 @@ layers.geometrical_def = (0, 0, 0)
 
 
 class TF2Upstride(layers.GenericTF2Upstride):
-  def __init__(self, strategy=''):
-    pass
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE0, strategy, name=name)
 
   def __call__(self, x):
     return x
 
 class Upstride2TF(layers.GenericUpstride2TF):
-  def __init__(self, strategy=''):
-    pass
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE0, strategy, name=name)
 
   def __call__(self, x):
     return x

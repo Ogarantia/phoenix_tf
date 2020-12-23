@@ -35,7 +35,8 @@ def _conv2d_grad(op, grad):
                                            dilations=op.get_attr("dilations"),
                                            data_format=op.get_attr("data_format"),
                                            groups=op.get_attr("groups"),
-                                           require_input_grad=op.get_attr("require_input_grad")), dbias
+                                           require_input_grad=op.get_attr("require_input_grad"),
+                                           type0_inputs=op.get_attr("type0_inputs")), dbias
 
 @ops.RegisterGradient("UpstrideDense")
 def _dense_grad(op, grad):

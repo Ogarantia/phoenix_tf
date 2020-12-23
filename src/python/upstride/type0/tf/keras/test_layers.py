@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 from packaging import version
 from upstride.internal.custom_ops import upstride_ops
-from upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, TestCase
+from upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase
 from upstride.internal.clifford_product import CliffordProduct
 from upstride.type0.tf.keras.layers import DepthwiseConv2D, Conv2D, Dense
 
@@ -28,6 +28,12 @@ class Type0DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
 class Type0DenseTestSet(DenseTestSet, unittest.TestCase):
   def setUp(self):
     self.setup(clifford_product, Dense)
+
+
+class Type0InputGradientAndTypeTest(InputGradientAndTypeTest, unittest.TestCase):
+  def setUp(self):
+    from upstride.type0.tf.keras import layers
+    self.setup(layers)
 
 
 def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32, batch_size=2, val=0.5):

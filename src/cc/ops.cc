@@ -26,6 +26,7 @@ REGISTER_OP("UpstrideConv2D")
     .Attr(tensorflow::GetConvnetDataFormatAttrString())
     .Attr("groups: int = 1")
     .Attr("require_input_grad: bool = true")
+    .Attr("type0_inputs: bool = false")
     .SetShapeFn([](tensorflow::shape_inference::InferenceContext* ctx) {
         static const int
             INPUT_IDX = 0,
@@ -67,6 +68,10 @@ REGISTER_OP("UpstrideConv2D")
             if (!getSpatialStep(tuple, 1, dilation))
                 return tensorflow::errors::InvalidArgument("Invalid dilations");
 
+            // check if real-valued input will be sent
+            bool realValuedInput;
+            GET_FIELD(ctx, "type0_inputs", realValuedInput);
+
             // proceed with shape inference
             using namespace upstride::frontend_tf;
             tensorflow::shape_inference::DimensionHandle outWidth, outHeight;
@@ -94,17 +99,26 @@ REGISTER_OP("UpstrideConv2D")
             if (!result.ok())
                 return result;
 
+            // compute output batch size
+            auto outputBatchSize = ctx->Dim(inputShape, 0);     // equals to input batch size by default
+            if (realValuedInput) {
+                // if real-valued input, the hypercomplex-valued output is (multivector dimension) times bigger
+                result = ctx->Multiply(outputBatchSize, upstride::MULTIVECTOR_DIM[algebra], &outputBatchSize);
+                if (!result.ok())
+                    return result;
+            }
+
             // write out the inferred shape
             switch (dataFormat) {
                 case upstride::DataFormat::NCHW:
                     ctx->set_output(0, ctx->MakeShape({
-                        ctx->Dim(inputShape, 0), ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra)), outHeight, outWidth
+                        outputBatchSize, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra)), outHeight, outWidth
                     }));
                     break;
 
                 case upstride::DataFormat::NHWC:
                     ctx->set_output(0, ctx->MakeShape({
-                        ctx->Dim(inputShape, 0), outHeight, outWidth, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra))
+                        outputBatchSize, outHeight, outWidth, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra))
                     }));
                     break;
 
@@ -139,6 +153,7 @@ REGISTER_OP("UpstrideConv2DGrad")
     .Attr(tensorflow::GetConvnetDataFormatAttrString())
     .Attr("groups: int = 1")
     .Attr("require_input_grad: bool = true")
+    .Attr("type0_inputs: bool = false")
     .SetShapeFn([](tensorflow::shape_inference::InferenceContext* c) {
         c->set_output(0, c->input(1));
         c->set_output(1, c->input(2));

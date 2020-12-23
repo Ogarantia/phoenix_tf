@@ -66,8 +66,8 @@ class TF2Upstride(layers.GenericTF2Upstride):
     k = TF2Upstride.learn_vector_component(x, 3)
     return tf.concat([r, i, j, k], axis=0)
 
-  def __init__(self, strategy=''):
-    super().__init__(layers.TYPE2, strategy, mappings={
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE2, strategy, name=name, mappings={
         'joint': self.rgb_in_img,
         'grayscale': self.gray_in_real_rgb_in_img,
         'learned': self.learn_multivector
@@ -75,8 +75,8 @@ class TF2Upstride(layers.GenericTF2Upstride):
 
 
 class Upstride2TF(layers.GenericUpstride2TF):
-  def __init__(self, strategy=''):
-    super().__init__(layers.TYPE2, strategy)
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE2, strategy, name=name)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")

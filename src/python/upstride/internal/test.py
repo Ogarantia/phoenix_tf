@@ -175,6 +175,7 @@ class TestBase:
     self.op_requires_data_format = op_requires_data_format
     self.random_tensor = random_integer_tensor if underlying_dtype is tf.int32 else random_float_tensor
     self.require_input_grad = True
+    self.receives_type0_inputs = False
 
   def assert_equal_tensors(self, tensor1, tensor2):
     """ Assert that two tensors are numerically (almost) equal
@@ -212,6 +213,7 @@ class TestBase:
 
     test_op = self.test_op_class(**kwargs)
     test_op.require_input_grad = self.require_input_grad
+    test_op.receives_type0_inputs = self.receives_type0_inputs
     return test_op
 
   def construct_reference_operation(self, bias, **kwargs):
@@ -276,7 +278,8 @@ class TestBase:
     kernels = [op.weights[0]] if test else [layer.weights[0] for layer in op.layers]
 
     with tf.GradientTape(persistent=True) as gt:
-      gt.watch(input_tensor)
+      if self.require_input_grad:
+        gt.watch(input_tensor)
       for kernel in kernels:
         gt.watch(kernel)
       if op.use_bias:
@@ -284,7 +287,7 @@ class TestBase:
       output = op(input_tensor)
       output = apply_some_non_linearity(output)
 
-    input_grad = gt.gradient(output, input_tensor)
+    input_grad = gt.gradient(output, input_tensor) if self.require_input_grad else None
     kernel_grad = [gt.gradient(output, kernel) for kernel in kernels]
     # stack kernel gradient tensors into a single tensor if there is more than one
     kernel_grad = tf.convert_to_tensor(kernel_grad) if len(kernel_grad) == 1 else tf.stack(kernel_grad, axis=0)
@@ -331,8 +334,9 @@ class Conv2DTestBase(TestBase):
     :ref_kernel_grad:      reference tensor with gradient wrt kernel
     """
     ref_output = transpose_to_channel_first(ref_output)
-    ref_input_grad = transpose_to_channel_first(ref_input_grad)
     ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", "nOIHW"))
+    if self.require_input_grad:
+      ref_input_grad = transpose_to_channel_first(ref_input_grad)
     return ref_output, ref_input_grad, ref_kernel_grad
 
   def run_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
@@ -341,7 +345,7 @@ class Conv2DTestBase(TestBase):
     :test_shape:          test input shape in channel-last format (NHWC)
     :dtype:               scalar data type of the test batch
     """
-    #verify the parameters passed in kwargs
+    # verify the parameters passed in kwargs
     self.verify_kwargs(**kwargs)
     kwargs.setdefault('use_bias', False)
 
@@ -358,14 +362,54 @@ class Conv2DTestBase(TestBase):
     # do transpositions to channel-first to compare with test tensors
     ref_output, ref_input_grad, ref_kernel_grad = self.transpose_ref_to_channel_first(ref_output, ref_input_grad, ref_kernel_grad)
 
-    # # assert on the difference between reference and test tensors
+    # assert on the difference between reference and test tensors
     self.assert_equal_tensors(ref_output, test_output)
-    self.assert_equal_tensors(ref_input_grad, test_input_grad)
     self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
+
+    if self.require_input_grad:
+      self.assert_equal_tensors(ref_input_grad, test_input_grad)
 
     if test_op.use_bias:
       # assert on the difference between reference and test bias tensors
       self.assert_equal_tensors(ref_bias_grad, test_bias_grad)
+
+  def run_conv2d_real_valued_input_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
+    """ Runs a single instance of a forward and backward pass test for a given parameter set.
+    The reference operation is run in channel-last format for compatibility with CPU backend.
+    The test operation is run in channel-first.
+    :test_shape:          test input shape in channel-last format (NHWC)
+    :dtype:               scalar data type of the test batch
+    """
+    # verify the parameters passed in kwargs
+    self.verify_kwargs(**kwargs)
+    assert kwargs.get('use_bias', False) == False, 'use_bias is not supported in tests with a real-valued input'
+
+    # set the parameters specific to convolutions with real valued input
+    kwargs['use_bias'] = False
+    self.require_input_grad = False
+    self.receives_type0_inputs = True
+
+    # generate channel-last random input
+    input_tensor = random_integer_tensor(test_shape, dtype=dtype)
+    input_tensor_channel_first = transpose_to_channel_first(input_tensor)
+    # generate extended input for the reference operation
+    input_tensor_with_zero_imag = tf.concat([
+        input_tensor,
+        tf.zeros((test_shape[0] * (self.clifford_product.dim - 1),) + test_shape[1:], dtype=dtype),
+    ], axis=0)
+
+    test_op = self.prepare_test_op(input_tensor_channel_first, **kwargs)
+    test_output, _, test_kernel_grad, _ = self.compute_output_and_gradients(test_op, input_tensor_channel_first, True)
+
+    ref_op = self.prepare_ref_op(input_tensor_with_zero_imag, test_op, **kwargs)
+    ref_output, _, ref_kernel_grad, _ = self.compute_output_and_gradients(ref_op, input_tensor_with_zero_imag, False)
+
+    # do transpositions to channel-first to compare with test tensors
+    ref_output, _, ref_kernel_grad = self.transpose_ref_to_channel_first(ref_output, _, ref_kernel_grad)
+
+    # assert on the difference between reference and test tensors
+    self.assert_equal_tensors(ref_output, test_output)
+    self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
 
 class DenseTestBase(TestBase):
@@ -382,7 +426,7 @@ class DenseTestBase(TestBase):
     :test_shape:          test input shape of rank 2 (in NC format)
     :dtype:               scalar data type of the test batch
     """
-    #verify the parameters passed in kwargs
+    # verify the parameters passed in kwargs
     self.verify_kwargs(**kwargs)
     kwargs.setdefault('use_bias', False)
 
@@ -456,6 +500,10 @@ class Conv2DTestSet(Conv2DTestBase):
   def test_grouped(self):
     """ Group Conv2D test """
     self.run_test_instance(test_shape=(1, 5, 5, 64), filters=48, groups=4, kernel_size=3)
+
+  def test_real_valued_input(self):
+    """ Conv2D with real-valued input test """
+    self.run_conv2d_real_valued_input_test_instance(test_shape=(2, 3, 4, 8), filters=16, kernel_size=3, strides=2, padding='same')
 
   @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
   def test_fp16(self):
@@ -616,3 +664,45 @@ class DenseTestSet(DenseTestBase):
   def test_fp16(self):
     """ Half-precision floating point Dense test """
     self.run_fp16_test_instance(test_shape=(2, 4), units=8, use_bias=True)
+
+
+class InputGradientAndTypeTest:
+  """ Tests "require_input_grad" and real-valued TF2Upstride output flags settings
+  """
+  def setup(self, layers):
+    self.layers = layers
+
+  def test(self):
+    # build a model: 2 blocks of (conv2d + batchnorm + ReLU) and a dense layer
+    model = tf.keras.Sequential([
+      tf.keras.layers.Input(shape=(3, 32, 32)),
+      self.layers.TF2Upstride(),
+      self.layers.Conv2D(32, kernel_size=3, strides=2, use_bias=False, data_format='channels_first', name='conv1'),
+      tf.keras.layers.BatchNormalization(),   #FIXME: Sequential does not accept layers that do not subclass tf.keras.Layer
+      tf.keras.layers.Activation('relu'),
+      self.layers.Conv2D(16, kernel_size=3, strides=2, use_bias=False, data_format='channels_first', name='conv2'),
+      tf.keras.layers.BatchNormalization(),
+      tf.keras.layers.Activation('relu'),
+      tf.keras.layers.Flatten(),
+      self.layers.Dense(units=10, name='dense'),
+      self.layers.Upstride2TF()
+    ])
+
+    conv1 = model.get_layer('conv1')
+    conv2 = model.get_layer('conv2')
+    dense = model.get_layer('dense')
+
+    # assert on the input gradient requiredness
+    assert conv1.require_input_grad == False,  "Input gradient for the first convolution layer should not be required"
+    assert conv2.require_input_grad == True,   "Input gradient for the first convolution layer should be required"
+    assert dense.require_input_grad == True,   "Input gradient for the dense layer should be required"
+
+    # make a pass through the model to initialize type0-related flags
+    model.compile(optimizer='sgd', loss='mse')
+    model.predict(tf.zeros((1, 3, 32, 32)))
+
+    # assert on type0-related flags
+    if conv1.upstride_datatype != TYPE0:
+      assert conv1.receives_type0_inputs == True,  "The first convolution layer should receive type0 input"
+    assert conv2.receives_type0_inputs == False,   "The second convolution layer should not receive type0 input"
+    assert dense.accepts_type0_inputs == False,    "The dense layer should not accept type0 input"

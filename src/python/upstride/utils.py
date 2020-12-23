@@ -15,3 +15,8 @@ def permutation(source : str, destination : str):
   except:
     raise ValueError("One input is expected to be a permutation of the other.")
   return permutation
+
+
+def listify(x):
+  """ If x is a list, returns it as is. Otherwise returns a list containing x itself. """
+  return x if isinstance(x, list) else [x]

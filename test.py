@@ -7,9 +7,9 @@ import tensorflow as tf
 
 # import testcases
 from upstride.internal.clifford_product import TestCliffordProduct
-from upstride.type0.tf.keras.test_layers import Type0Conv2DTestSet, Type0PointwiseConv2DTestSet, Type0DepthwiseConv2DTestSet, Type0DenseTestSet
+from upstride.type0.tf.keras.test_layers import Type0Conv2DTestSet, Type0PointwiseConv2DTestSet, Type0DepthwiseConv2DTestSet, Type0DenseTestSet, Type0InputGradientAndTypeTest
 from upstride.type1.tf.keras.test_layers import *
-from upstride.type2.tf.keras.test_layers import Type2Conv2DTestSet, Type2PointwiseConv2DTestSet, Type2DepthwiseConv2DTestSet, Type2DenseTestSet
+from upstride.type2.tf.keras.test_layers import Type2Conv2DTestSet, Type2PointwiseConv2DTestSet, Type2DepthwiseConv2DTestSet, Type2DenseTestSet, Type2InputGradientAndTypeTest
 from upstride.type3.tf.keras.test_layers import *
 
 # import exhaustive testcases

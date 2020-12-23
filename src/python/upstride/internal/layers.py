@@ -4,6 +4,7 @@ import functools
 import inspect
 from typing import List, Tuple
 import tensorflow as tf
+from ..utils import listify
 
 # algebra identification
 TYPE0 = 0
@@ -130,7 +131,7 @@ def unit_multiplier(i: int, j: int) -> Tuple[int, int]:
 def get_layers(layer: tf.keras.layers.Layer, *argv, **kwargs) -> Tuple[List[tf.keras.layers.Layer], bool, dict]:
   """instantiate layer several times to match the number needed by the GA definition
 
-  Any parameter analysis need to be done here. For instance, we can't define several times 
+  Any parameter analysis need to be done here. For instance, we can't define several times
   a layer with the same name, so we need to edit the name manually
 
   Args:
@@ -212,7 +213,8 @@ class UpstrideLayer:
   def __init__(self):
     """ Defines the attributes common to all Upstride layers.
     """
-    self.upstride_datatype = None # Value to specify in subclass
+    self.upstride_datatype = None       # Value to specify in subclass
+    self.accepts_type0_inputs = False   # Set to True in subclasses accepting real-valued tensors along with the hypercomplex ones
     self.require_input_grad = None
 
   # TODO consider parsing the graph from the input to the children - rather than from the current node to
@@ -227,38 +229,22 @@ class UpstrideLayer:
       Returns False if all the parent nodes have no trainable weights. Otherwise, returns True.
       """
       for parent_node in parent_nodes:
-        # In TF v2.2, parent_node.inbound_layers is either a list or a layer.
-        # The following if-statement standardizes into a list
-        if isinstance(parent_node.inbound_layers, list):
-          inbound_layers = parent_node.inbound_layers
-        else:
-          inbound_layers = [parent_node.inbound_layers]
-
-        for inbound_layer in inbound_layers:
-          if parent_node.inbound_layers.trainable_weights != []:
+        for inbound_layer in listify(parent_node.inbound_layers):
+          if inbound_layer.trainable_weights != []:
             return True
           else:
-            parent_nodes = inbound_layer.inbound_nodes
-            return have_trainable_weights(parent_nodes)
+            return have_trainable_weights(inbound_layer.inbound_nodes)
       return False
 
     # If require_input_grad has not been computed, then inspect the graph to determine if it is required
     if self.require_input_grad is None:
       self.require_input_grad = False
       for inbound_node in self._inbound_nodes:
-        # In TF v2.2, parent_node.inbound_layers is either a list or a layer.
-        # The following if-statement standardizes into a list
-        if isinstance(inbound_node.inbound_layers, list):
-          inbound_layers = inbound_node.inbound_layers
-        else:
-          inbound_layers = [inbound_node.inbound_layers]
-
-        for inbound_layer in inbound_layers:
+        for inbound_layer in listify(inbound_node.inbound_layers):
           parent_nodes = inbound_layer.inbound_nodes
           if have_trainable_weights(parent_nodes):
             self.require_input_grad = True
             break
-
 
 class CustomInitializer(tf.keras.initializers.Initializer):
   """ Base class for Upstride initializers.
@@ -338,7 +324,7 @@ class BiasLayer(tf.keras.layers.Layer):
 
 class GenericLinear:
   """
-  this operation will perform linear operation for every GA. 
+  this operation will perform linear operation for every GA.
   Please note that this operation is not very efficient (need to split the tensor, do the computation then concat the results)
   """
   def __init__(self, layer, *argv, **kwargs):
@@ -361,7 +347,7 @@ class GenericLinear:
 
 class GenericNonLinear:
   """
-  with the current mathematical formulation of GoM, non linear layers become easy to do : 
+  with the current mathematical formulation of GoM, non linear layers become easy to do :
   for most of them, we simply need to call the tensorflow function. As real part and imaginary parts are stacked
   on first component of the tensor (usually the batch size), it is transparent for tensorflow
   """
@@ -493,10 +479,11 @@ class Concatenate(GenericNonLinear):
 # with the formulation of saving the blades of the multivector in the Batch dim, we need to handle
 # Dropout and Batch normalization differently than other layers
 
-class SplittedNonLinear:
+class SplittedNonLinear(UpstrideLayer):
   def __init__(self, layer, *argv, **kwargs):
     # get_layers is needed for changing the name of the layer if defined by the user
     self.layers, _, _ = get_layers(layer, *argv, **kwargs)
+    self.accepts_type0_inputs = False   # SplittedNonLinear operate on per-blade basis; need to have all blades on input
 
   def __call__(self, inputs, **kwargs):
     inputs = tf.split(inputs, len(blade_indexes))
@@ -524,17 +511,57 @@ class GenericTF2Upstride(tf.keras.layers.Layer):
   def default_mapping(self, x: tf.Tensor):
     """ Default TF2Upstride mapping: puts the input tensor values into the first (likely real) multivector dimension
     """
+    # if not yet, check if the connected ops accept a real-valued input
+    if self.can_issue_type0 is None and self.outbound_nodes:
+      def recurse(layer):
+        """ Scans recursively the output nodes of a layer subject to type0 inputs acceptance.
+        """
+        for node in layer.outbound_nodes:
+          if isinstance(node.outbound_layer, UpstrideLayer):
+            # for upstride layers, stop immediately if type0 is not accepted
+            if not node.outbound_layer.accepts_type0_inputs:
+              return False
+          else:
+            # non-upstride layers assume accepting type0, recurse
+            if not recurse(node.outbound_layer):
+              return False
+        return True
+
+      # check if a type0 tensor can be issued
+      self.can_issue_type0 = recurse(self)
+
+      # if yes, update the outputs about type0 tensor coming
+      if self.can_issue_type0:
+        def recurse(layer):
+          """ Sets receives_type0_inputs to True to UpstrideLayer instances connected on output
+          """
+          for node in layer.outbound_nodes:
+            if isinstance(node.outbound_layer, UpstrideLayer):
+              node.outbound_layer.receives_type0_inputs = True
+            else:
+              recurse(node.outbound_layer)
+        recurse(self)
+
+    # if can keep real-valued tensor, return as is
+    if self.can_issue_type0:
+      return x
+
+    # set the real part to x, the rest to zero
     zeros = tf.zeros_like(x)
     return tf.concat([x] + [zeros] * (self.dim - 1), axis=0)
 
-  def __init__(self, uptype, mapping='', mappings=None):
+
+  def __init__(self, uptype, mapping='', mappings=None, name=None):
     """ Instantiates TF2Upstride operation.
     Args:
         :uptype:    UpStride datatype index
         :mapping:   the mapping strategy
         :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
     """
+    super().__init__(name=name)
+    self.built = False
     self.dim = upstride_type_to_dimension(uptype)
+    self.can_issue_type0 = None
 
     # build a dictionary of mappings
     all_mappings = {
@@ -552,8 +579,15 @@ class GenericTF2Upstride(tf.keras.layers.Layer):
     except KeyError:
       raise ValueError(f"TF2Upstride mapping is not implemented: {mapping}")
 
-  def __call__(self, x):
+  def call(self, x):
     return self.mapping(x)
+
+  def compute_mask(self, inputs, previous_mask):
+    """ Overrides compute_mask to intercept the graph and call compute_require_input_grad.
+    The value of self.require_input_grad depends on self.inbound_nodes, which is defined after the
+    method call() is called and before compute_mask() is called.
+    """
+    return super().compute_mask(inputs, previous_mask)
 
 
 class GenericUpstride2TF(tf.keras.layers.Layer):
@@ -573,13 +607,14 @@ class GenericUpstride2TF(tf.keras.layers.Layer):
     """
     return tf.concat(tf.split(x, self.dim), -1)
 
-  def __init__(self, uptype, mapping='', mappings=None):
+  def __init__(self, uptype, mapping='', mappings=None, name=None):
     """ Instantiates Upstride2TF operation.
     Args:
         :uptype:    UpStride datatype index
         :mapping:   the mapping strategy
         :mappings:  a dictionary of custom mappings (string keys => mapping functions of signature (self, x: tf.Tensor))
     """
+    super().__init__(name=name)
     self.dim = upstride_type_to_dimension(uptype)
 
     # build a dictionary of mappings

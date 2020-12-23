@@ -105,7 +105,9 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                      bias_constraint=bias_constraint,
                      **kwargs)
     UpstrideLayer.__init__(self)
-    self.upstride_conv_op = upstride_conv2d
+    self.accepts_type0_inputs = not use_bias    # conv2d can operate with the real input tensor if no bias added (engine constraint)
+    self.receives_type0_inputs = False          # may be set to True by TF2Upstride, if the inputs will be real tensors
+    self.upstride_conv_op = upstride_conv2d     # the backend op to call
 
     # Handling casual paddiing in TF prior to TF2.3
     if version.parse(tf.__version__) < version.parse("2.3"):
@@ -167,6 +169,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                                    groups=self.groups,
                                    name=self.name,
                                    require_input_grad=self.require_input_grad,
+                                   type0_inputs=self.receives_type0_inputs,
                                    use_bias=self.use_bias)
 
     if self.activation is not None:

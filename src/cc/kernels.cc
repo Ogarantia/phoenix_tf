@@ -80,6 +80,7 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
     upstride::IntTuple dilation;
     int groups;
     bool useBias;
+    bool realValuedInput;           //!< if `true`, the input of this Conv2D is real-valued
     upstride::UpstrideConv2DFunctor<Device, T> *backend;
 
    public:
@@ -101,6 +102,7 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
 
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
         OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
+        OP_REQUIRES_OK(context, context->GetAttr("type0_inputs", &realValuedInput));
 
         // configure the operation backend
         //FIXME: Check status and throw an exception
@@ -108,7 +110,7 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
         upstride::getSpatialStep(stride, 1, st);
         upstride::getSpatialStep(dilation, 1, dil);
 
-        backend = new upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, useBias);
+        backend = new upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, useBias, realValuedInput);
     }
 
     ~UpstrideConv2DOpKernel() {
@@ -127,13 +129,16 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
-            TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
+            auto outShape = upstride::computeConvOutputSize(
                 algebra, dataFormat,
                 input.getShape(), filter.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups);
+
+            if (realValuedInput)
+                outShape[0] = outShape[0] * upstride::MULTIVECTOR_DIM[algebra];
 
             // allocate output tensor
-            OutputTensorTF<Device, T> output(context, device, outShape);
+            OutputTensorTF<Device, T> output(context, device, toTensorflowShape(outShape));
 
             // execute the operation
             if (useBias) {
@@ -160,6 +165,7 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
     upstride::IntTuple dilation;
     int groups;
     bool requireInputGrad;
+    bool realValuedInput;           //!< if `true`, the input of this Conv2D is real-valued
     upstride::UpstrideConv2DGradFunctor<Device, T>* backend;
 
    public:
@@ -188,15 +194,16 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
-
+        OP_REQUIRES_OK(context, context->GetAttr("type0_inputs", &realValuedInput));
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
+
         // configure the operation backend
         try {
             upstride::IntPair st, dil;
             upstride::getSpatialStep(stride, 1, st);
             upstride::getSpatialStep(dilation, 1, dil);
-            backend = new upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, requireInputGrad);
-    } catch (std::exception& ex) {
+            backend = new upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, requireInputGrad, realValuedInput);
+        } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
     }
@@ -218,10 +225,10 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
 
             // compute output shape and paddings
             upstride::IntPair padBefore, padAfter;
-            TensorShape outShape = toTensorflowShape(upstride::computeConvOutputSize(
+            upstride::computeConvOutputSize(
                 algebra, dataFormat,
                 input.getShape(), kernel.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups));
+                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups);
 
             // allocate output tensor
             OutputTensorTF<Device, T> kernelGrad(context, device, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);

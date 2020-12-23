@@ -8,13 +8,13 @@ layers.geometrical_def = (2, 0, 0)
 
 
 class TF2Upstride(layers.GenericTF2Upstride):
-  def __init__(self, strategy=''):
-    super().__init__(layers.TYPE1, strategy)
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE1, strategy, name=name)
 
 
 class Upstride2TF(layers.GenericUpstride2TF):
-  def __init__(self, strategy=''):
-    super().__init__(layers.TYPE1, strategy)
+  def __init__(self, strategy='', name=None):
+    super().__init__(layers.TYPE1, strategy, name=name)
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type1")
