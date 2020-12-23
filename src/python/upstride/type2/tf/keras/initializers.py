@@ -9,9 +9,10 @@ Implementation is done following this open-source:
 import numpy as np
 import tensorflow as tf
 from upstride.internal.layers import CustomInitializer
+from upstride.internal.initializers import ConvInitializer, DepthwiseConvInitializer, DenseInitializer
 
 
-class QInitializer(CustomInitializer):
+class HInitializer(CustomInitializer):
   def __init__(self, criterion, seed=None):
     """
     Constructs a quaternion initializer.
@@ -30,7 +31,7 @@ class QInitializer(CustomInitializer):
     """
     # ensure fan_in and fan_out are defined
     if self.fan_in is None or self.fan_out is None:
-      raise ValueError('QInitializer is not set up: fan_in and/or fan_out not set')
+      raise ValueError('HInitializer is not set up: fan_in and/or fan_out not set')
 
     # compute Rayleigh distribution scale
     if self.criterion == 'up2_init_glorot':
@@ -85,17 +86,14 @@ class QInitializer(CustomInitializer):
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class QInitializerConv(QInitializer):
+class HInitializerConv(HInitializer, ConvInitializer):
   def __init__(self, criterion, groups, seed=None):
-    super().__init__(criterion, seed)
+    HInitializer.__init__(self, criterion, seed)
     self.groups = groups
-  
+
   def __call__(self, shape, dtype=None):
-    # assuming [4, O, I, H, W] kernel layout
-    assert len(shape) == 5 and shape[0] == 4
-    # for grouped convolutions, the convention is [4, g * Og, I, H, W]
-    self.fan_in = shape[2] * np.prod(shape[3:])
-    self.fan_out = shape[1] * np.prod(shape[3:]) // self.groups
+    assert shape[0] == 4
+    self.compute_fans(shape, self.groups)
     return super().__call__(shape, dtype=dtype)
 
   def get_config(self):
@@ -104,17 +102,15 @@ class QInitializerConv(QInitializer):
     return config
 
 
-class QInitializerDepthwiseConv(QInitializer):
+@tf.keras.utils.register_keras_serializable("upstride_type2")
+class HInitializerDepthwiseConv(HInitializer, DepthwiseConvInitializer):
   def __init__(self, criterion, depth_multiplier, seed=None):
-    super().__init__(criterion, seed)
+    HInitializer.__init__(self, criterion, seed)
     self.depth_multiplier = depth_multiplier
 
   def __call__(self, shape, dtype=None):
-    # assuming [4, O, I, H, W] kernel layout
-    assert len(shape) == 5 and shape[0] == 4
-    # for depthwise convolutions, the convention is [4, depth_multiplier * I, 1, H, W]
-    self.fan_in = np.prod(shape[3:])
-    self.fan_out = self.depth_multiplier * np.prod(shape[3:])
+    assert shape[0] == 4
+    self.compute_fans(shape, self.depth_multiplier)
     return super().__call__(shape, dtype=dtype)
 
   def get_config(self):
@@ -124,12 +120,11 @@ class QInitializerDepthwiseConv(QInitializer):
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
-class QInitializerDense(QInitializer):
+class HInitializerDense(HInitializer, DenseInitializer):
   def __call__(self, shape, dtype=None):
     # assuming [4, I, O] kernel layout
-    assert len(shape) == 3 and shape[0] == 4
-    self.fan_in = shape[1]
-    self.fan_out = shape[2]
+    assert shape[0] == 4
+    self.compute_fans(shape)
     return super().__call__(shape, dtype=dtype)
 
 

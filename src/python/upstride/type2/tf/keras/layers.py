@@ -3,7 +3,7 @@ from typing import Dict
 import tensorflow as tf
 from tensorflow.keras import initializers
 from tensorflow.python.keras.utils import conv_utils, tf_utils
-from upstride.type2.tf.keras.initializers import is_type2_init, QInitializerConv, QInitializerDepthwiseConv, QInitializerDense
+from upstride.type2.tf.keras.initializers import is_type2_init, HInitializerConv, HInitializerDepthwiseConv, HInitializerDense
 from upstride.internal import convolution, dense, layers
 from upstride.internal.layers import *
 
@@ -100,7 +100,7 @@ class Conv2D(convolution.GenericConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(kernel_initializer):
-      kernel_initializer = QInitializerConv(criterion=kernel_initializer, groups=groups)
+      kernel_initializer = HInitializerConv(criterion=kernel_initializer, groups=groups)
     super().__init__(filters=filters,
                      kernel_size=kernel_size,
                      strides=strides,
@@ -141,7 +141,7 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(depthwise_initializer):
-      depthwise_initializer = QInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier)
+      depthwise_initializer = HInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier)
     super().__init__(
         kernel_size=kernel_size,
         strides=strides,
@@ -178,7 +178,7 @@ class Dense(dense.GenericDense):
                **kwargs):
     # intercept kernel initializer string
     if is_type2_init(kernel_initializer):
-      kernel_initializer = QInitializerDense(criterion=kernel_initializer)
+      kernel_initializer = HInitializerDense(criterion=kernel_initializer)
     super().__init__(units=units,
                      activation=activation,
                      use_bias=use_bias,

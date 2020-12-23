@@ -1,5 +1,6 @@
 import tensorflow as tf
 from upstride.internal import convolution, dense, layers
+from upstride.type1.tf.keras.initializers import is_type1_init, CInitializerConv, CInitializerDepthwiseConv, CInitializerDense
 from upstride.internal.layers import *
 
 layers.upstride_type = 1
@@ -28,7 +29,7 @@ class Conv2D(convolution.GenericConv2D):
                groups=1,
                activation=None,
                use_bias=True,
-               kernel_initializer='glorot_uniform',
+               kernel_initializer='up1_init_he',
                bias_initializer='zeros',
                kernel_regularizer=None,
                bias_regularizer=None,
@@ -36,6 +37,9 @@ class Conv2D(convolution.GenericConv2D):
                kernel_constraint=None,
                bias_constraint=None,
                **kwargs):
+    # intercept kernel initializer string
+    if is_type1_init(kernel_initializer):
+      kernel_initializer = CInitializerConv(criterion=kernel_initializer, groups=groups)
     super().__init__(filters=filters,
                      kernel_size=kernel_size,
                      strides=strides,
@@ -67,7 +71,7 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                dilation_rate=(1, 1),
                activation=None,
                use_bias=True,
-               depthwise_initializer='glorot_uniform',
+               depthwise_initializer='up1_init_he',
                bias_initializer='zeros',
                depthwise_regularizer=None,
                bias_regularizer=None,
@@ -75,6 +79,9 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                depthwise_constraint=None,
                bias_constraint=None,
                **kwargs):
+    # intercept kernel initializer string
+    if is_type1_init(depthwise_initializer):
+      depthwise_initializer = CInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier)
     super().__init__(
         kernel_size=kernel_size,
         strides=strides,
@@ -101,7 +108,7 @@ class Dense(dense.GenericDense):
                units,
                activation=None,
                use_bias=True,
-               kernel_initializer='glorot_uniform',
+               kernel_initializer='up1_init_he',
                bias_initializer='zeros',
                kernel_regularizer=None,
                bias_regularizer=None,
@@ -109,6 +116,9 @@ class Dense(dense.GenericDense):
                kernel_constraint=None,
                bias_constraint=None,
                **kwargs):
+    # intercept kernel initializer string
+    if is_type1_init(kernel_initializer):
+      kernel_initializer = CInitializerDense(criterion=kernel_initializer)
     super().__init__(units=units,
                      activation=activation,
                      use_bias=use_bias,
