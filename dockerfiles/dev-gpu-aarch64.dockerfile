@@ -6,9 +6,10 @@ RUN apt-get update && apt-get install -y python3-pip python3-dev build-essential
         libhdf5-serial-dev hdf5-tools libhdf5-dev zlib1g-dev zip libjpeg8-dev \
         gfortran libopenblas-dev liblapack-dev
 
-RUN pip3 install -U pip cython
-RUN pip3 install -U --no-binary=h5py h5py==2.10.0
-RUN pip3 install --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v44 tensorflow==${TF_VERSION}+nv20.8
+RUN python3 -m pip install cython
+RUN python3 -m pip install numpy
+RUN python3 -m pip install h5py==2.10.0
+RUN python3 -m pip install --no-cache-dir --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v44 tensorflow==${TF_VERSION}+nv20.8
 
 # wget and compile cmake 3.18
 RUN apt update && apt install -y wget libssl1.0-dev
