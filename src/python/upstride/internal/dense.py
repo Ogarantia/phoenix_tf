@@ -98,5 +98,4 @@ class GenericDense(tf.keras.layers.Dense, UpstrideLayer):
 
   def get_config(self):
     config = super().get_config()
-    config["require_input_grad"] = self.require_input_grad
     return config

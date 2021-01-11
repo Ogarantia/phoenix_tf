@@ -187,7 +187,6 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
   def get_config(self):
     config = super().get_config()
     config["groups"] = self.groups
-    config["require_input_grad"] = self.require_input_grad
     return config
 
 
