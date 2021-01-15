@@ -2,8 +2,8 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from upstride.type2.tf.keras.layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase, apply_some_non_linearity
-from upstride.internal.test_exhaustive import PointwiseConv2DExhaustiveTestSet
+from src.python.upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase, apply_some_non_linearity
+from src.python.upstride.internal.test_exhaustive import PointwiseConv2DExhaustiveTestSet
 from upstride.internal.clifford_product import CliffordProduct
 from upstride import utils
 

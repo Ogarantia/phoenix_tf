@@ -1,6 +1,6 @@
 import unittest
 from upstride.type3.tf.keras import layers
-from upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest
+from src.python.upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest
 from upstride.internal.clifford_product import CliffordProduct
 
 
