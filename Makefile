@@ -4,11 +4,7 @@ PYTHON ?= python3
 ARCH ?= `arch`           # possible values are local, x86_64 and aarch64
 
 # specifying TensorFlow version (availability depends on the platform)
-ifeq ($(shell arch),aarch64)
-TF_VERSION?=2.2.0
-else
 TF_VERSION?=2.3.0
-endif
 
 # setting up default docker images references (used if not specified)
 ifeq ($(GPU),ON)

@@ -6,10 +6,9 @@ RUN apt-get update && apt-get install -y python3-pip python3-dev build-essential
         libhdf5-serial-dev hdf5-tools libhdf5-dev zlib1g-dev zip libjpeg8-dev \
         gfortran libopenblas-dev liblapack-dev
 
-RUN python3 -m pip install cython
-RUN python3 -m pip install numpy
+RUN python3 -m pip install cython numpy
 RUN python3 -m pip install h5py==2.10.0
-RUN python3 -m pip install --no-cache-dir --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v44 tensorflow==${TF_VERSION}+nv20.8
+RUN python3 -m pip install --no-cache-dir --pre --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v44 tensorflow==${TF_VERSION}+nv20.9
 
 # add fancy UpStride bash welcome screen
 COPY dockerfiles/bash.bashrc /root/.bash_aliases

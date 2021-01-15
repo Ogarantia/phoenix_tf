@@ -6,7 +6,7 @@ import jenkins.model.Jenkins
 
 pipeline {
     agent {
-        label 'scaleway-gpu'
+        label 'jetson'
     }
     environment {
         SLACK_WEBHOOK = 'https://hooks.slack.com/services/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'
@@ -17,7 +17,7 @@ pipeline {
         BUILD_TAG_PROD = "px"
         BUILD_TAG_DEV = "pxdev"
         TF_VERSION = "2.3.0"
-        ARCH = "x86_64"
+        ARCH = "aarch64"
     }
     stages {
         stage('setup') {
@@ -78,17 +78,10 @@ pipeline {
             steps {
                 // run tests on GPU
                 script {
-                    docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
-                        docker.image(env.BUILD_DEV).inside(){
+                    docker.withRegistry("https://${BUILD_PROD}", 'registry-prod'){
+                        docker.image(env.BUILD_PROD).inside("--gpus all -u root:root"){
+                            sh("""python3 -m pip install pytest""")
                             sh("""PYTHONPATH=src/python python3 test.py""")
-                        }
-                    }
-                }
-                // run tests on CPU
-                script {
-                    docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
-                        docker.image(env.BUILD_DEV).inside("--gpus all"){
-                            sh("""CUDA_VISIBLE_DEVICES= PYTHONPATH=src/python python3 test.py""")
                         }
                     }
                 }
