@@ -1,9 +1,3 @@
-import java.util.logging.FileHandler
-import java.util.logging.SimpleFormatter
-import java.util.logging.LogManager
-import jenkins.model.Jenkins
-
-
 pipeline {
     agent {
         label 'scaleway-gpu'
@@ -20,13 +14,6 @@ pipeline {
         ARCH = "x86_64"
     }
     stages {
-        stage('setup') {
-            steps {
-                script {
-                    setLogger()
-                }
-            }
-        }
         stage ('git checkout'){
             steps{
                 // checkout submodules and fetch toolchain binaries
@@ -153,35 +140,6 @@ pipeline {
     }
 }
 
-// Log into a file
-def setLogger(){
-    def RunLogger = LogManager.getLogManager().getLogger("global")
-    def logsDir = new File(Jenkins.instance.rootDir, "logs")
-    if(!logsDir.exists()){logsDir.mkdirs()}
-    env.LOGFILE = logsDir.absolutePath+'/default.log'
-    FileHandler handler = new FileHandler("${LOGFILE}", 1024 * 1024, 10, true);
-    handler.setFormatter(new SimpleFormatter());
-    RunLogger.addHandler(handler)
-}
-
-import groovy.json.JsonOutput;
-
-class Event {
-    def event
-    def id
-    def service
-    def status
-    def infos
-}
-
-def publish(String id, String status, String infos){
-    Event evt = new Event('event':'ci', 'id':id, 'service':'bitbucket', 'status':status, 'infos':infos)
-    def message = JsonOutput.toJson(evt)
-    sh"""
-        gcloud pubsub topics publish notifications-prod --message ${message}
-    """
-}
-
 def header(){
     env.SLACK_HEADER = ":glitch_crab: *`"+env.GIT_BRANCH+"`* updated by "+env.GIT_AUTHOR_INFO
     env.SLACK_MESSAGE = env.GIT_COMMIT_MSG+'\n\n'
@@ -205,15 +163,4 @@ def success(String body){
 
 def error(String body){
     env.SLACK_MESSAGE = env.SLACK_MESSAGE+'\n :scream: *'+body.toString()+'*'
-}
-
-def readLogs(){
-    try {
-        def logs = readFile(env.LOGFILE)
-        return logs
-    }
-    catch(e){
-        def logs = "-- no logs --"
-        return logs
-    }
 }
