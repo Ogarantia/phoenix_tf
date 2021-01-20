@@ -1,7 +1,10 @@
 import tensorflow as tf
 import pytest
 from .test import Conv2DTestBase
+import platform
 
+reason = "Too large for JetsonNano"
+is_jetson_nano = "tegra" in platform.uname().release
 
 @pytest.mark.slow
 class PointwiseConv2DExhaustiveTestSet(Conv2DTestBase):
@@ -12,10 +15,18 @@ class PointwiseConv2DExhaustiveTestSet(Conv2DTestBase):
     self.DEFAULT_BATCH_SIZE = 4
 
   @pytest.mark.parametrize('img_side_length, input_channels, output_channels', [
-    (112, 8, 8),          # expanded_conv_project
-    (112, 8, 48),         # block_1_expand
-    (56, 48, 8),          # block_{1, 2}_project
-    (56, 8, 48),          # block_{2, 3}_expand
+    pytest.param
+      (112, 8, 8,
+      marks=pytest.mark.skipif(is_jetson_nano, reason=reason)), # expanded_conv_project
+    pytest.param
+      (112, 8, 48,
+      marks=pytest.mark.skipif(is_jetson_nano, reason=reason)), # block_1_expand
+    pytest.param
+      (56, 48, 8,
+      marks=pytest.mark.skipif(is_jetson_nano, reason=reason)), # block_{1, 2}_project
+    pytest.param
+      (56, 8, 48,
+      marks=pytest.mark.skipif(is_jetson_nano, reason=reason)), # block_{2, 3}_expand
     (28, 48, 8),          # block_{3, 4, 5}_project
     (28, 8, 48),          # block_{4, 5, 6}_expand
     (14, 48, 16),         # block_6_project

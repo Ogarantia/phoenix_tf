@@ -5,6 +5,7 @@ from upstride.internal.custom_ops import upstride_ops
 from src.python.upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase
 from upstride.internal.clifford_product import CliffordProduct
 from upstride.type0.tf.keras.layers import DepthwiseConv2D, Conv2D, Dense
+import platform
 
 clifford_product = CliffordProduct((0, 0, 0), [""])
 setUpModule()
@@ -98,10 +99,11 @@ class TestConv2D(TestCase):
 
 
   def test_conv2d(self):
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=3)
-    self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=4, use_bias=True)
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', batch_size=5)
-    self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', use_bias=True)
+    if ("tegra" not in platform.uname().release):
+      self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=3)
+      self.run_conv2d_test(img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', batch_size=4, use_bias=True)
+      self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', batch_size=5)
+      self.run_conv2d_test(img_size=224, filter_size=4, in_channels=3, out_channels=64, padding='SAME', use_bias=True)
     self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2])
     self.run_conv2d_test(img_size=224, filter_size=5, in_channels=3, out_channels=16, strides=[2, 2], use_bias=True)
     self.run_conv2d_test(img_size=112, filter_size=6, in_channels=16, out_channels=32, dilations=[2, 2])

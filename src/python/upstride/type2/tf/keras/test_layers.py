@@ -6,6 +6,7 @@ from src.python.upstride.internal.test import setUpModule, Conv2DTestSet, Pointw
 from src.python.upstride.internal.test_exhaustive import PointwiseConv2DExhaustiveTestSet
 from upstride.internal.clifford_product import CliffordProduct
 from upstride import utils
+import platform
 
 
 clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
@@ -109,9 +110,9 @@ class TestType2LayersTF2Upstride(unittest.TestCase):
     self.assertEqual(y.shape, (8, 640, 480, 1))
 
   def test_learn_multivector(self):
-    x = tf.convert_to_tensor(np.zeros((2, 640, 480, 3), dtype=np.float32))
+    x = tf.convert_to_tensor(np.zeros((2, 320, 240, 3), dtype=np.float32))
     y = TF2Upstride(strategy='learned')(x)
-    self.assertEqual(y.shape, (8, 640, 480, 3))
+    self.assertEqual(y.shape, (8, 320, 240, 3))
 
   def test_default(self):
     x = tf.convert_to_tensor(np.zeros((2, 640, 480, 3), dtype=np.float32))
@@ -249,8 +250,10 @@ class TestType2Conv2D(TestCase):
       self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, padding='SAME', use_bias=True)
       self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2])
       self.run_test(img_size=56, filter_size=4, in_channels=3, out_channels=8, strides=[2, 2], use_bias=True)
-      self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID')
-      self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
+      # Remove this particular test for JetsonNano
+      if ("tegra" not in platform.uname().release):
+        self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID')
+        self.run_test(img_size=224, filter_size=3, in_channels=3, out_channels=48, strides=[2, 2], padding='VALID', use_bias=True)
     finally:
       tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
 

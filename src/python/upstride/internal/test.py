@@ -269,13 +269,13 @@ class TestBase:
     ref_op.set_kernels(kernels)
     return ref_op
 
-  def compute_output_and_gradients(self, op, input_tensor, test):
+  def compute_output_and_gradients(self, op, input_tensor, upstride_based_op):
     """ Compute the forward and backward pass tensors for the given operation
     :op:                  operation to run
     :input_tensor:        input data tensor
-    :test:                if 'true', op is the tested operation, else the reference one
+    :upstride_based_op:   if 'true', op is upstride-based operation, else it is cliffordProduct-based
     """
-    kernels = [op.weights[0]] if test else [layer.weights[0] for layer in op.layers]
+    kernels = [op.weights[0]] if upstride_based_op else [layer.weights[0] for layer in op.layers]
 
     with tf.GradientTape(persistent=True) as gt:
       if self.require_input_grad:
@@ -411,6 +411,55 @@ class Conv2DTestBase(TestBase):
     self.assert_equal_tensors(ref_output, test_output)
     self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
+  def run_conv2d_strided_dilated_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
+    """ Runs a single instance of a forward and backward pass test for a strided and dilated conv.
+    The reference operation is run in channel-last format for compatibility with CPU backend.
+    :test_shape:          test input shape in channel-last format (NHWC)
+    :dtype:               scalar data type of the test batch
+    """
+    if kwargs['strides'] != kwargs['dilation_rate']:
+      raise NotImplementedError("Currently, only tests with strides equals to dilation_rate are supported.")
+    if (type(kwargs['strides']) is tuple and len(kwargs['strides']) == 2 and kwargs['strides'][0] != kwargs['strides'][1]
+        and 'padding' in kwargs and kwargs['padding'].lower() != 'valid'):
+      raise NotImplementedError("Currently, tests with padding == 'same' and strides different between height and width are not supported.")
+    assert tuple(kwargs['strides']) != (1, 1), 'this test expects a two-dimensional non-unitary tuple for both strides and dilation_rate'
+  
+    # verify the parameters passed in kwargs
+    self.verify_kwargs(**kwargs)
+    kwargs.setdefault('use_bias', False)
+
+    # generate random channel-last input
+    input_tensor = self.create_input_tensor(test_shape, dtype)
+    input_tensor_channel_first = transpose_to_channel_first(input_tensor)
+
+    test_op = self.prepare_test_op(input_tensor_channel_first, **kwargs)
+    test_output, test_input_grad, test_kernel_grad, test_bias_grad = self.compute_output_and_gradients(test_op, input_tensor_channel_first, True)
+
+    # simulate test_op by cherry-picking the desired elements of input_tensor into the new input tensor and setting strides and dilation_rate to 1
+    input_tensor_channel_first_cropped = input_tensor_channel_first[:, :, ::kwargs['strides'][0], ::kwargs['strides'][1]]
+    ref_op_kwargs = kwargs.copy()
+    ref_op_kwargs['strides'] = 1
+    ref_op_kwargs['dilation_rate'] = 1
+
+    # prepare ref_op based on test_op (instead on cliffordProduct instance) and manually overwrite kernel and bias
+    ref_op = self.prepare_test_op(input_tensor_channel_first_cropped, **ref_op_kwargs)
+    if test_op.use_bias:
+      ref_op.set_weights([test_op.kernel.numpy(), test_op.bias.numpy()])
+    else:
+      ref_op.set_weights([test_op.kernel.numpy()])
+    ref_output, ref_input_grad, ref_kernel_grad, ref_bias_grad = self.compute_output_and_gradients(ref_op, input_tensor_channel_first_cropped, True)
+
+    # assert on the difference between reference and test tensors
+    self.assert_equal_tensors(ref_output, test_output)
+    self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
+
+    if self.require_input_grad:
+      self.assert_equal_tensors(ref_input_grad, test_input_grad[:, :, ::kwargs['strides'][0], ::kwargs['strides'][1]])
+
+    if test_op.use_bias:
+      # assert on the difference between reference and test bias tensors
+      self.assert_equal_tensors(ref_bias_grad, test_bias_grad)
+
 
 class DenseTestBase(TestBase):
   def setup(self, clifford_product, test_op_class, underlying_dtype=tf.int32):
@@ -510,6 +559,18 @@ class Conv2DTestSet(Conv2DTestBase):
     """ Half-precision floating point Conv2D test """
     self.run_fp16_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True)
 
+  def test_strided_dilated(self): # TODO consider replacing inheritance from unittests to pytest (everywhere) to be able to use @pytest.mark.parametrize
+    """ Strided dilated Conv2D test """
+    params = [
+      (False, (2, 3), "valid"),
+      (True , (2, 3), "valid"),
+      (False, (3, 3), "same"),
+      (True , (3, 3), "same"),
+      (False, (3, 3), "valid"),
+      (True , (3, 3), "valid"),
+    ]
+    for param in params:
+      self.run_conv2d_strided_dilated_test_instance(test_shape=(2, 10, 10, 8), filters=3, kernel_size=3, use_bias=param[0], strides=param[1], dilation_rate=param[1], padding=param[2])
 
 class PointwiseConv2DTestSet(Conv2DTestBase):
   """ Test set for pointwise Conv2D operation
