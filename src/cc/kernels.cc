@@ -261,7 +261,7 @@ class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKern
         OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
 
         // configure the operation backend
-        backend = new upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::NC, useBias);
+        backend = new upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::IO, useBias);
     }
 
     ~UpstrideDenseOpKernel() {
@@ -320,7 +320,7 @@ class UpstrideDenseGradOpKernel : public UpstrideBaseOpKernel<Device>, public Op
 
         // configure the operation backend
         try {
-            backend = new upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::NC, requireInputGrad);
+            backend = new upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::IO, requireInputGrad);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
