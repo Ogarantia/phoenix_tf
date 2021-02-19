@@ -237,7 +237,7 @@ class UpstrideLayer:
       return False
 
     # If require_input_grad has not been computed, then inspect the graph to determine if it is required
-    if self.require_input_grad is None:
+    if self.require_input_grad is None and self._inbound_nodes != []:
       self.require_input_grad = False
       for inbound_node in self._inbound_nodes:
         for inbound_layer in listify(inbound_node.inbound_layers):
@@ -650,3 +650,8 @@ class GenericUpstride2TF(tf.keras.layers.Layer):
 
   def __call__(self, x):
     return self.mapping(x)
+
+
+def clean_up():
+  from .custom_ops import upstride_ops
+  upstride_ops.clean_up()

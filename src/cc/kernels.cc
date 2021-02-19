@@ -30,7 +30,7 @@ inline upstride::Context& getContextInstance<upstride::device::CPU>() {
 template<>
 inline upstride::device::CPU& fromTensorflowDevice(OpKernelContext* context) {
     // nothing special to do here
-    static upstride::device::CPU device;
+    static upstride::device::CPU device(getContextInstance<upstride::device::CPU>());
     return device;
 }
 
@@ -43,30 +43,47 @@ inline upstride::Context& getContextInstance<upstride::device::CUDA>() {
 
 template<>
 inline upstride::device::CUDA& fromTensorflowDevice(OpKernelContext* context) {
-    auto stream = context->eigen_device<Eigen::GpuDevice>().stream();
+    auto referenceStream = context->eigen_device<Eigen::GpuDevice>().stream();
     // CUDA devices are identified by their streams
-    return static_cast<upstride::cudnn::Context&>(getContextInstance<upstride::device::CUDA>()).registerDevice(stream);
+    return static_cast<upstride::cudnn::Context&>(getContextInstance<upstride::device::CUDA>()).registerDevice(referenceStream);
 }
 #endif
 
 /**
- * @brief Base class for upstride kernels
+ * @brief Temporary memory allocator callback implementation
  */
-template<typename Device>
-class UpstrideBaseOpKernel {
-  protected:
-    UpstrideBaseOpKernel() {
-        getContextInstance<Device>().increaseKernelCounter();
+class TFAllocator : public upstride::Allocator {
+private:
+    const size_t alignmentConstraint;
+    OpKernelContext* context;
+    tensorflow::Tensor buffer;
+    bool isAllocated;
+
+public:
+    template <typename Device>
+    inline TFAllocator(OpKernelContext* context, Device& device):
+        alignmentConstraint(device.getAlignmentConstraint()), context(context), isAllocated(false)
+    {}
+
+    inline void* mallocTemp(size_t size) override {
+        if (isAllocated)
+            throw std::runtime_error("Temporary memory already allocated");
+        if (context->allocate_temp(DT_UINT8, { (int64)size }, &buffer) != ::tensorflow::Status::OK())
+            throw std::runtime_error("Cannot allocate a temporary buffer of " + std::to_string(size) + " bytes");
+        isAllocated = true;
+        return buffer.flat<uint8_t>().data();
     }
-    ~UpstrideBaseOpKernel() {
-        getContextInstance<Device>().decreaseKernelCounter();
+
+    inline size_t getAlignmentConstraint() const override {
+        return alignmentConstraint;
     }
 };
+
 
 // OpKernel definition.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
-class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
+class UpstrideConv2DOpKernel : public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -76,20 +93,16 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
-    upstride::IntTuple stride;
-    upstride::IntTuple dilation;
+    upstride::IntPair stride;
+    upstride::IntPair dilation;
     int groups;
     bool useBias;
     bool realValuedInput;           //!< if `true`, the input of this Conv2D is real-valued
-    upstride::UpstrideConv2DFunctor<Device, T> *backend;
 
    public:
     explicit UpstrideConv2DOpKernel(OpKernelConstruction* context) : OpKernel(context),
                                                                      algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
-        OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
-        OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
-
         std::string paddingStr;
         OP_REQUIRES_OK(context, context->GetAttr("padding", &paddingStr));
         paddingPreset = upstride::paddingFromString(paddingStr);
@@ -106,15 +119,11 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
 
         // configure the operation backend
         //FIXME: Check status and throw an exception
-        upstride::IntPair st, dil;
-        upstride::getSpatialStep(stride, 1, st);
-        upstride::getSpatialStep(dilation, 1, dil);
-
-        backend = new upstride::UpstrideConv2DFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, useBias, realValuedInput);
-    }
-
-    ~UpstrideConv2DOpKernel() {
-        delete backend;
+        upstride::IntTuple stride, dilation;
+        OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
+        OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
+        upstride::getSpatialStep(stride, 1, this->stride);
+        upstride::getSpatialStep(dilation, 1, this->dilation);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -127,26 +136,23 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
             InputTensorTF<Device, T> input(context, device, INPUT_IMAGE_IDX);
             InputTensorTF<Device, T> filter(context, device, INPUT_FILTER_IDX);
 
-            // compute output shape and paddings
-            upstride::IntPair padBefore, padAfter;
-            auto outShape = upstride::computeConvOutputSize(
-                algebra, dataFormat,
-                input.getShape(), filter.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups);
-
-            if (realValuedInput)
-                outShape[0] = outShape[0] * upstride::MULTIVECTOR_DIM[algebra];
+            // initialize a descriptor
+            const upstride::Conv2DFwdDescriptor descriptor(
+                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, useBias, realValuedInput);
 
             // allocate output tensor
-            OutputTensorTF<Device, T> output(context, device, toTensorflowShape(outShape));
+            OutputTensorTF<Device, T> output(context, device, toTensorflowShape(descriptor.getOutputShape()));
+
+            // create an allocator instance
+            TFAllocator allocator(context, device);
 
             // execute the operation
             if (useBias) {
                 InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
-                (*backend)(device, input, filter, &bias, output, padBefore, padAfter, groups);
+                upstride::conv2DFwd<Device, T>(device, allocator, input, filter, &bias, output, descriptor);
             }
             else {
-                (*backend)(device, input, filter, nullptr, output, padBefore, padAfter, groups);
+                upstride::conv2DFwd<Device, T>(device, allocator, input, filter, nullptr, output, descriptor);
             }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
@@ -156,33 +162,29 @@ class UpstrideConv2DOpKernel : public UpstrideBaseOpKernel<Device>, public OpKer
 
 
 template <typename Device, typename T>
-class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
+class UpstrideConv2DGradOpKernel : public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
-    upstride::IntTuple stride;
-    upstride::IntTuple dilation;
+    upstride::IntPair stride;
+    upstride::IntPair dilation;
     int groups;
     bool requireInputGrad;
     bool realValuedInput;           //!< if `true`, the input of this Conv2D is real-valued
-    upstride::UpstrideConv2DGradFunctor<Device, T>* backend;
 
    public:
     static const int
-        INPUT_GRAD_IDX = 0,    //!< index of the input tensor containing the loss function gradient
-        INPUT_INPUT_IDX = 1,   //!< index of the input tensor containing the image
-        INPUT_KERNEL_IDX = 2;  //!< index of the input tensor containing the filter
+        INPUT_GRAD_IDX = 0,         //!< index of the input tensor containing the loss function gradient
+        INPUT_INPUT_IDX = 1,        //!< index of the input tensor containing the image
+        INPUT_FILTER_IDX = 2;       //!< index of the input tensor containing the filter
     static const int
-        OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
+        OUPUT_FILTERGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
     explicit UpstrideConv2DGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
                                                                          algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
-        OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
-        OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
-
         std::string paddingStr;
         OP_REQUIRES_OK(context, context->GetAttr("padding", &paddingStr));
         paddingPreset = upstride::paddingFromString(paddingStr);
@@ -197,19 +199,11 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
         OP_REQUIRES_OK(context, context->GetAttr("type0_inputs", &realValuedInput));
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
 
-        // configure the operation backend
-        try {
-            upstride::IntPair st, dil;
-            upstride::getSpatialStep(stride, 1, st);
-            upstride::getSpatialStep(dilation, 1, dil);
-            backend = new upstride::UpstrideConv2DGradFunctor<Device, T>(getContextInstance<Device>(), algebra, dataFormat, st, dil, requireInputGrad, realValuedInput);
-        } catch (std::exception& ex) {
-            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
-        }
-    }
-
-    ~UpstrideConv2DGradOpKernel() {
-        delete backend;
+        upstride::IntTuple stride, dilation;
+        OP_REQUIRES_OK(context, context->GetAttr("strides", &stride));
+        OP_REQUIRES_OK(context, context->GetAttr("dilations", &dilation));
+        upstride::getSpatialStep(stride, 1, this->stride);
+        upstride::getSpatialStep(dilation, 1, this->dilation);
     }
 
     void Compute(OpKernelContext* context) override {
@@ -220,22 +214,22 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
 
             // grab inputs
             InputTensorTF<Device, T> grad(context, device, INPUT_GRAD_IDX);
-            InputTensorTF<Device, T> kernel(context, device, INPUT_KERNEL_IDX);
+            InputTensorTF<Device, T> filter(context, device, INPUT_FILTER_IDX);
             InputTensorTF<Device, T> input(context, device, INPUT_INPUT_IDX);
 
-            // compute output shape and paddings
-            upstride::IntPair padBefore, padAfter;
-            upstride::computeConvOutputSize(
-                algebra, dataFormat,
-                input.getShape(), kernel.getShape(),
-                paddingPreset, explicitPadding, stride, dilation, padBefore, padAfter, groups);
+            // initialize a descriptor
+            const upstride::Conv2DBwdDescriptor descriptor(
+                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, requireInputGrad, realValuedInput);
 
             // allocate output tensor
-            OutputTensorTF<Device, T> kernelGrad(context, device, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
+            OutputTensorTF<Device, T> filterGrad(context, device, context->input(INPUT_FILTER_IDX).shape(), OUPUT_FILTERGRAD_IDX);
             OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
+            // create an allocator instance
+            TFAllocator allocator(context, device);
+
             // execute the operation
-            (*backend)(device, input, kernel, grad, kernelGrad, inputGrad, padBefore, padAfter, groups);
+            upstride::conv2DBwd<Device, T>(device, allocator, input, filter, grad, filterGrad, inputGrad, descriptor);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
@@ -244,7 +238,7 @@ class UpstrideConv2DGradOpKernel : public UpstrideBaseOpKernel<Device>, public O
 
 
 template <typename Device, typename T>
-class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
+class UpstrideDenseOpKernel : public OpKernel {
     static const int
         INPUT_IMAGE_IDX = 0,   //!< index of the input tensor containing the image
         INPUT_FILTER_IDX = 1,  //!< index of the input tensor containing the filter
@@ -252,20 +246,12 @@ class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKern
 
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     bool useBias;
-    upstride::UpstrideDenseFunctor<Device, T>* backend;
 
    public:
     explicit UpstrideDenseOpKernel(OpKernelConstruction* context) : OpKernel(context),
                                                                     algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
-
-        // configure the operation backend
-        backend = new upstride::UpstrideDenseFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::IO, useBias);
-    }
-
-    ~UpstrideDenseOpKernel() {
-        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -283,13 +269,19 @@ class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKern
             // allocate output tensor
             OutputTensorTF<Device, T> output(context, device, outShape);
 
+            // setup descriptor
+            const upstride::DenseFwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::DataFormat::IO, useBias);
+
+            // create an allocator instance
+            TFAllocator allocator(context, device);
+
             // execute the operation
             if (useBias) {
                 InputTensorTF<Device, T> bias(context, device, INPUT_BIAS_IDX);
-                (*backend)(device, input, filter, &bias, output);
+                upstride::denseFwd<Device, T>(device, allocator, input, filter, &bias, output, descriptor);
             }
             else {
-                (*backend)(device, input, filter, nullptr, output);
+                upstride::denseFwd<Device, T>(device, allocator, input, filter, nullptr, output, descriptor);
             }
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
@@ -299,35 +291,22 @@ class UpstrideDenseOpKernel : public UpstrideBaseOpKernel<Device>, public OpKern
 
 
 template <typename Device, typename T>
-class UpstrideDenseGradOpKernel : public UpstrideBaseOpKernel<Device>, public OpKernel {
+class UpstrideDenseGradOpKernel : public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     bool requireInputGrad;
-    upstride::UpstrideDenseGradFunctor<Device, T>* backend;
-
    public:
     static const int
         INPUT_GRAD_IDX = 0,    //!< index of the input tensor containing the loss function gradient
         INPUT_INPUT_IDX = 1,   //!< index of the input tensor containing the image
-        INPUT_KERNEL_IDX = 2;  //!< index of the input tensor containing the filter
+        INPUT_FILTER_IDX = 2;  //!< index of the input tensor containing the filter
     static const int
-        OUTPUT_KERNELGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
+        OUPUT_FILTERGRAD_IDX = 1,  //!< index of the output tensor containing the loss function gradient
         OUPUT_INPUTGRAD_IDX = 0;    //!< index of the output tensor containing the filter
 
     explicit UpstrideDenseGradOpKernel(OpKernelConstruction* context) : OpKernel(context),
                                                                         algebra(upstride::frontend_tf::getAlgebra(context)) {
         // fetch parameters
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
-
-        // configure the operation backend
-        try {
-            backend = new upstride::UpstrideDenseGradFunctor<Device, T>(getContextInstance<Device>(), algebra, upstride::DataFormat::IO, requireInputGrad);
-        } catch (std::exception& ex) {
-            context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
-        }
-    }
-
-    ~UpstrideDenseGradOpKernel() {
-        delete backend;
     }
 
     void Compute(OpKernelContext* context) override {
@@ -338,15 +317,19 @@ class UpstrideDenseGradOpKernel : public UpstrideBaseOpKernel<Device>, public Op
 
             // grab inputs
             InputTensorTF<Device, T> grad(context, device, INPUT_GRAD_IDX);
-            InputTensorTF<Device, T> kernel(context, device, INPUT_KERNEL_IDX);
+            InputTensorTF<Device, T> filter(context, device, INPUT_FILTER_IDX);
             InputTensorTF<Device, T> input(context, device, INPUT_INPUT_IDX);
 
             // allocate output tensor
-            OutputTensorTF<Device, T> kernelGrad(context, device, context->input(INPUT_KERNEL_IDX).shape(), OUTPUT_KERNELGRAD_IDX);
+            OutputTensorTF<Device, T> filterGrad(context, device, context->input(INPUT_FILTER_IDX).shape(), OUPUT_FILTERGRAD_IDX);
             OutputTensorTF<Device, T> inputGrad(context, device, context->input(INPUT_INPUT_IDX).shape(), OUPUT_INPUTGRAD_IDX);
 
+            // create an allocator instance
+            TFAllocator allocator(context, device);
+
             // execute the operation
-            (*backend)(device, input, kernel, grad, kernelGrad, inputGrad);
+            const upstride::DenseBwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::DataFormat::IO, requireInputGrad);
+            upstride::denseBwd<Device, T>(device, allocator, input, filter, grad, filterGrad, inputGrad, descriptor);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));
         }
@@ -364,6 +347,22 @@ class UpstrideWaitOpKernel : public OpKernel {
     explicit UpstrideWaitOpKernel(OpKernelConstruction* context): OpKernel(context) {}
 
     void Compute(OpKernelContext* context) override;
+};
+
+
+/**
+ * @brief Recycles all the resources used by the engine.
+ */
+class UpstrideCleanUpOpKernel : public OpKernel {
+   public:
+    explicit UpstrideCleanUpOpKernel(OpKernelConstruction* context): OpKernel(context) {}
+
+    void Compute(OpKernelContext* context) override {
+        getContextInstance<upstride::device::CPU>().cleanUp();
+#ifdef BACKEND_CUDNN
+        getContextInstance<upstride::device::CUDA>().cleanUp();
+#endif
+    }
 };
 
 
@@ -411,6 +410,7 @@ REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideConv2DGrad);
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideDense);
 REGISTER_UPSTRIDE_OP(float, CPU, CPU, UpstrideDenseGrad);
 REGISTER_KERNEL_BUILDER(Name("Wait").Device(DEVICE_CPU), UpstrideWaitOpKernel<upstride::device::CPU>);
+REGISTER_KERNEL_BUILDER(Name("CleanUp").Device(DEVICE_CPU), UpstrideCleanUpOpKernel);
 
 // Register the GPU kernels.
 #ifdef BACKEND_CUDNN

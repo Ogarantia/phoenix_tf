@@ -749,6 +749,9 @@ class InputGradientAndTypeTest:
       self.layers.Upstride2TF()
     ])
 
+    # call model to initialize attribute require_input_grad
+    model(tf.random.uniform(shape=(8, 3, 32, 32)))
+
     conv1 = model.get_layer('conv1')
     conv2 = model.get_layer('conv2')
     dense = model.get_layer('dense')

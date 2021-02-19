@@ -168,7 +168,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                                    data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
                                    groups=self.groups,
                                    name=self.name,
-                                   require_input_grad=self.require_input_grad,
+                                   require_input_grad=self.require_input_grad or self.require_input_grad is None,
                                    type0_inputs=self.receives_type0_inputs,
                                    use_bias=self.use_bias)
 

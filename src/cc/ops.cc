@@ -216,3 +216,4 @@ REGISTER_OP("UpstrideDenseGrad")
 
 
 REGISTER_OP("Wait");
+REGISTER_OP("CleanUp");

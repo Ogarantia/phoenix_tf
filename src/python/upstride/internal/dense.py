@@ -74,7 +74,7 @@ class GenericDense(tf.keras.layers.Dense, UpstrideLayer):
                                     self.bias if self.use_bias else [],
                                     uptype=self.upstride_datatype,
                                     name=self.name,
-                                    require_input_grad=self.require_input_grad,
+                                    require_input_grad=self.require_input_grad or self.require_input_grad is None,
                                     use_bias=self.use_bias)
 
     if self.activation is not None:

@@ -2,6 +2,14 @@ pipeline {
     agent {
         label 'scaleway-gpu'
     }
+    parameters {
+        string(name: 'TF_VERSION', defaultValue: '2.4.0')
+        string(name: 'QUIET', defaultValue: 'false', description: 'if true, no Slack message is sent on success')
+    }
+    triggers {
+        // periodic runs with previous versions of TensorFlow
+        parameterizedCron("@midnight %TF_VERSION=2.3.0;QUIET=true")
+    }
     environment {
         SLACK_WEBHOOK = 'https://hooks.slack.com/services/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'
         REGISTRY_PROD = 'registryupstrideprod.azurecr.io'
@@ -10,7 +18,7 @@ pipeline {
         REPO_NAME = 'phoenix_tf'
         BUILD_TAG_PROD = "px"
         BUILD_TAG_DEV = "pxdev"
-        TF_VERSION = "2.3.0"
+        TF_VERSION = "${params.TF_VERSION}"
         ARCH = "x86_64"
     }
     stages {
@@ -46,7 +54,7 @@ pipeline {
         stage('build docker') {
             steps {
                 script {
-                    sh("make docker GPU=ON TF_VERSION=${TF_VERSION} DEVELOPMENT_DOCKER_REF=${BUILD_DEV} PRODUCTION_DOCKER_REF=${BUILD_PROD}")
+                    sh("make distclean docker GPU=ON TF_VERSION=${TF_VERSION} DEVELOPMENT_DOCKER_REF=${BUILD_DEV} PRODUCTION_DOCKER_REF=${BUILD_PROD}")
                 }
             }
             post {
@@ -128,14 +136,19 @@ pipeline {
     }
     post {
         success {
-            info("All good. :heavy_check_mark:")
+            script {
+                info("All good. :heavy_check_mark:")
+                info("Logs here: ${BUILD_URL}console")
+                if (!params.QUIET)
+                    slack()
+            }
         }
         failure {
-            info("Pipeline failed. :face_with_head_bandage:")
-        }
-        always {
-            info("Logs here: ${BUILD_URL}console")
-            slack()
+            script {
+                info("Pipeline failed. :face_with_head_bandage:")
+                info("Logs here: ${BUILD_URL}console")
+                slack()
+            }
         }
     }
 }
