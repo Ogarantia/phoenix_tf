@@ -254,7 +254,7 @@ class CustomInitializer(tf.keras.initializers.Initializer):
   """
   pass
 
-#FIXME: this class is much likely not used
+
 class BiasLayer(tf.keras.layers.Layer):
   """Keras layer that only adds a bias to the input.
 
@@ -262,15 +262,16 @@ class BiasLayer(tf.keras.layers.Layer):
   with some modifications when initializing the weight to use the same conf as other layers
 
   `BiasLayer` implements the operation:
-  `output = input + bias`
+    `output = input + bias`
+  for channels-first input.
   Arguments:
       bias_initializer: Initializer for the bias vector.
   Input shape:
-      nD tensor with shape: `(batch_size, ..., input_dim)`. The most common
+      nD tensor with shape: `(batch_size, input_dim, ...)`. The most common
         situation would be a 2D input with shape `(batch_size, input_dim)`. Note
         a rank of at least 2 is required.
   Output shape:
-      nD tensor with shape: `(batch_size, ..., input_dim)`. For instance, for a
+      nD tensor with shape: `(batch_size, input_dim, ...)`. For instance, for a
         2D input with shape `(batch_size, input_dim)`, the output would have
         shape `(batch_size, input_dim)`.
   """
@@ -285,20 +286,28 @@ class BiasLayer(tf.keras.layers.Layer):
     self.bias_constraint = tf.keras.constraints.get(bias_constraint)
 
     self.supports_masking = True
-    self.input_spec = tf.keras.layers.InputSpec(min_ndim=2)
+    self.input_spec = tf.keras.layers.InputSpec(min_ndim=2, max_ndim=4)
 
   def build(self, input_shape):
     input_shape = tf.TensorShape(input_shape)
-    last_dim = tf.compat.dimension_value(input_shape[-1])
+    channels_dim = tf.compat.dimension_value(input_shape[1])
 
-    if last_dim is None:
-      raise ValueError('The last dimension of the inputs to `BiasLayer` '
+    if channels_dim is None:
+      raise ValueError('The channels dimension of the inputs to `BiasLayer` '
                        'should be defined. Found `None`.')
 
-    self.input_spec = tf.keras.layers.InputSpec(min_ndim=2, axes={-1: last_dim})
+    # infer data format from the input shape
+    if len(input_shape) == 2:
+      self.data_format = 'NC'
+    elif len(input_shape) == 4:
+      self.data_format = 'NCHW'
+    else:
+      raise ValueError('Unsupported input shape.')
+
+    self.input_spec = tf.keras.layers.InputSpec(min_ndim=2, axes={1: channels_dim})
     self.bias = self.add_weight(
         name='bias',
-        shape=[input_shape[-1]],
+        shape=[input_shape[1]],
         initializer=self.bias_initializer,
         regularizer=self.bias_regularizer,
         constraint=self.bias_constraint,
@@ -308,7 +317,7 @@ class BiasLayer(tf.keras.layers.Layer):
     self.built = True
 
   def call(self, inputs):
-    return tf.nn.bias_add(inputs, self.bias)
+    return tf.nn.bias_add(inputs, self.bias, data_format=self.data_format)
 
   def compute_output_shape(self, input_shape):
     return input_shape
@@ -329,6 +338,11 @@ class GenericLinear:
   """
   def __init__(self, layer, *argv, **kwargs):
     self.layers, self.add_bias, self.bias_parameters = get_layers(layer, *argv, **kwargs)
+    if self.add_bias:
+      self.bias_layers = [
+        BiasLayer(self.bias_parameters['bias_initializer'], self.bias_parameters['bias_regularizer'], self.bias_parameters['bias_constraint'])
+        for i in range(multivector_length())
+      ]
 
   def __call__(self, inputs):
     # split the input tensor into a list containing [real, complex1, ....]
@@ -340,7 +354,7 @@ class GenericLinear:
 
     if self.add_bias:
       for i in range(multivector_length()):
-        outputs[i] = BiasLayer(self.bias_parameters['bias_initializer'], self.bias_parameters['bias_regularizer'], self.bias_parameters['bias_constraint'])(outputs[i])
+        outputs[i] = self.bias_layers[i](outputs[i])
     outputs = tf.concat(outputs, 0)
     return outputs
 
