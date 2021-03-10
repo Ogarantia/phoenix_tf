@@ -1,7 +1,8 @@
-UPSTRIDE_DEBUG ?= ON	# development build
-GPU ?= OFF				# enables GPU backend
+UPSTRIDE_DEBUG ?= ON		# development build
+UPSTRIDE_DEVICE_DEBUG ?= OFF	# development build
+GPU ?= OFF			# enables GPU backend
 PYTHON ?= python3
-ARCH ?= `arch`           # possible values are local, x86_64 and aarch64
+ARCH ?= `arch`           	# possible values are local, x86_64 and aarch64
 
 # specifying TensorFlow version (availability depends on the platform)
 TF_VERSION?=2.4.0
@@ -41,7 +42,7 @@ build/*.so : build/Makefile $(shell find $(CORE_SOURCE_PATH) -type f) $(shell fi
 build/Makefile: FP16 ?= ON
 build/Makefile: CMakeLists.txt
 	@mkdir -p build
-	@cd build && cmake -DWITH_CUDNN=$(GPU) -DUPSTRIDE_DEBUG=$(UPSTRIDE_DEBUG) -DWITH_FP16=$(FP16) -DARCH=$(ARCH) ..
+	@cd build && cmake -DWITH_CUDNN=$(GPU) -DUPSTRIDE_DEBUG=$(UPSTRIDE_DEBUG) -DWITH_FP16=$(FP16) -DARCH=$(ARCH) -DUPSTRIDE_DEVICE_DEBUG=$(UPSTRIDE_DEVICE_DEBUG) ..
 
 # removes the build folder
 distclean:
@@ -72,7 +73,7 @@ dev_docker:
 # uses dev docker to build production docker image having the Engine as a Python module
 docker: dev_docker
 	@docker run --rm --gpus all -v `pwd`:/opt/upstride -w /opt/upstride $(DEVELOPMENT_DOCKER_REF) \
-				make clean install_wheel GPU=$(GPU) UPSTRIDE_DEBUG=OFF
+				make clean install_wheel GPU=$(GPU) UPSTRIDE_DEBUG=OFF UPSTRIDE_DEVICE_DEBUG=OFF
 	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
 				  -t $(PRODUCTION_DOCKER_REF) \
 				  -f dockerfiles/prod-$(DOCKERFILE_SUFFIX).dockerfile .
