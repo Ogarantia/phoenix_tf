@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.keras.utils import conv_utils
 from upstride.internal import convolution, dense, layers
 from upstride.type1.tf.keras.initializers import is_type1_init, CInitializerConv, CInitializerDepthwiseConv, CInitializerDense
 from upstride.internal.layers import *
@@ -39,7 +40,9 @@ class Conv2D(convolution.GenericConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(kernel_initializer):
-      kernel_initializer = CInitializerConv(criterion=kernel_initializer, groups=groups, data_format=data_format)
+      kernel_initializer = CInitializerConv(criterion=kernel_initializer,
+                                            groups=groups,
+                                            data_format=conv_utils.normalize_data_format(data_format))
     super().__init__(filters=filters,
                      kernel_size=kernel_size,
                      strides=strides,
@@ -81,7 +84,9 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(depthwise_initializer):
-      depthwise_initializer = CInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier, data_format=data_format)
+      depthwise_initializer = CInitializerDepthwiseConv(criterion=depthwise_initializer,
+                                                        depth_multiplier=depth_multiplier,
+                                                        data_format=conv_utils.normalize_data_format(data_format))
     super().__init__(
         kernel_size=kernel_size,
         strides=strides,

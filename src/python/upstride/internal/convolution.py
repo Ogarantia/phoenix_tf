@@ -7,6 +7,7 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops
 from tensorflow.python.keras import constraints, initializers, regularizers
+from tensorflow.python.keras.utils import conv_utils
 from upstride.internal.custom_ops import upstride_conv2d
 from upstride.utils import permutation
 from upstride.internal.layers import append_outermost_dim, CustomInitializer, UpstrideLayer
@@ -103,7 +104,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
 
     # Intercept keras initializer
     if kernel_initializer and not isinstance(kernel_initializer, CustomInitializer):
-      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer, data_format)
+      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer, conv_utils.normalize_data_format(data_format))
 
     # Call super class constructor
     super().__init__(filters,
@@ -128,9 +129,9 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
     self.upstride_conv_op = upstride_conv2d     # the backend op to call
 
     # get filter layout
-    self.filter_layout = _DATA_FORMAT_TO_FILTER_LAYOUT.get(data_format, None)
+    self.filter_layout = _DATA_FORMAT_TO_FILTER_LAYOUT.get(self.data_format, None)
     if self.filter_layout is None:
-      raise ValueError(f"Cannot infer Conv2D filter layout from data format '{data_format}'")
+      raise ValueError(f"Cannot infer Conv2D filter layout from data format '{self.data_format}'")
 
     # Handling casual paddiing in TF prior to TF2.3
     if version.parse(tf.__version__) < version.parse("2.3"):
@@ -242,7 +243,9 @@ class GenericDepthwiseConv2D(GenericConv2D):
 
     # Intercept keras initializer
     if depthwise_initializer and not isinstance(depthwise_initializer, CustomInitializer):
-      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer, data_format, depthwise=True)
+      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer,
+                                                      conv_utils.normalize_data_format(data_format),
+                                                      depthwise=True)
 
     super().__init__(
         filters=None,
