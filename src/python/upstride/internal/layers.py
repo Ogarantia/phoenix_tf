@@ -252,8 +252,13 @@ class CustomInitializer(tf.keras.initializers.Initializer):
   To apply them to multidimensional UpStride datatypes, interception mechanisms are implemented. All the internal
   initializers are assumed to be derived from this class to make sure the interception mechanics works correctly.
   """
-  pass
+  def __init__(self, data_format=None):
+    if data_format == None:
+      raise ValueError('Initializer is not set up: data_format must be specified')
+    self.data_format = data_format
 
+  def get_config(self):
+    return {'data_format': self.data_format}
 
 class BiasLayer(tf.keras.layers.Layer):
   """Keras layer that only adds a bias to the input.
@@ -276,7 +281,7 @@ class BiasLayer(tf.keras.layers.Layer):
         shape `(batch_size, input_dim)`.
   """
 
-  def __init__(self, bias_initializer='zeros', bias_regularizer=None, bias_constraint=None, **kwargs):
+  def __init__(self, bias_initializer='zeros', bias_regularizer=None, bias_constraint=None, data_format=None, **kwargs):
     if 'input_shape' not in kwargs and 'input_dim' in kwargs:
       kwargs['input_shape'] = (kwargs.pop('input_dim'),)
 
@@ -287,6 +292,7 @@ class BiasLayer(tf.keras.layers.Layer):
 
     self.supports_masking = True
     self.input_spec = tf.keras.layers.InputSpec(min_ndim=2, max_ndim=4)
+    self.data_format = data_format
 
   def build(self, input_shape):
     input_shape = tf.TensorShape(input_shape)
@@ -300,7 +306,8 @@ class BiasLayer(tf.keras.layers.Layer):
     if len(input_shape) == 2:
       self.data_format = 'NC'
     elif len(input_shape) == 4:
-      self.data_format = 'NCHW'
+      assert self.data_format != None
+      self.data_format = 'NCHW' if self.data_format == 'channels_first' else 'NHWC'
     else:
       raise ValueError('Unsupported input shape.')
 

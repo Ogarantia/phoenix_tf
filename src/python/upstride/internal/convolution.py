@@ -11,22 +11,33 @@ from upstride.internal.custom_ops import upstride_conv2d
 from upstride.utils import permutation
 from upstride.internal.layers import append_outermost_dim, CustomInitializer, UpstrideLayer
 
+""" Implements mapping of Conv2D input/output tensors layout aka "data format" onto filter layouts.
+    There is no intrinsic link between the tensors and filter layouts except for their support by the backend.
+    This dict implements a convention currently supported by the engine.
+"""
+_DATA_FORMAT_TO_FILTER_LAYOUT = {
+  'channels_first': 'OIHW',
+  'channels_last': 'OHWI',
+}
 
 
 class Conv2DKernelInitWrapper(CustomInitializer):
   """ Wraps a standard keras kernel initializer to generate a convolution kernel for a given algebra
   Keras initializers may use the kernel shape to adjust parameters of the distribution used to produce the initial
   value of a convolution kernel. The kernel shape is different between UpStride and keras, namely
-   - the layouts are different: UpStride type0 kernels are OIHW, while keras kernels are HWIO for regular convolutions
-     and HWOI for depthwise convolutions,
-   - for an n-dimensional algebra, UpStride kernels are nOIHW.
+   - the layouts are different: keras kernels are HWIO for regular convolutions and HWOI for depthwise convolutions,
+     while UpstrideKernels depend on the inputs and outputs tensors layout ("data format")
+   - for a higher-dimensional algebra, UpStride kernels are of rank 5.
   This class makes sure the initial distribution matches the expected one when using a standard keras initializer.
   """
-  def __init__(self, initializer, depthwise=False):
+  def __init__(self, initializer, data_format, depthwise=False):
     self.initializer = tf.keras.initializers.get(initializer)
+    self.data_format = data_format
+    self.depthwise = depthwise
     # get permutations
-    # OIHW is the UpStride way, HWIO / HWOI is expected by TensorFlow
-    upstride = 'OIHW'
+    upstride = _DATA_FORMAT_TO_FILTER_LAYOUT.get(data_format, None)
+    if upstride is None:
+      raise ValueError(f"Unsupported data format: {data_format}")
     tensorflow = 'HWOI' if depthwise else 'HWIO'
     self.up_to_tf = permutation(upstride, tensorflow)
     self.tf_to_up = permutation(tensorflow, upstride)
@@ -50,11 +61,18 @@ class Conv2DKernelInitWrapper(CustomInitializer):
     return tf.stack(blades, axis=0) if shape[0] > 1 else blades[0]
 
   def get_config(self):
-    return self.initializer.get_config()
+    config = self.initializer.get_config()
+    config.update({
+      '_upstride_data_format': self.data_format,
+      '_upstride_depthwise': self.depthwise
+    })
+    return config
 
   @classmethod
   def from_config(config):
-    return Conv2DKernelInitWrapper(super().from_config(config))
+    data_format = config.pop('_upstride_data_format')
+    depthwise = config.pop('_upstride_depthwise')
+    return Conv2DKernelInitWrapper(super().from_config(config), data_format=data_format, depthwise=depthwise)
 
 
 class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
@@ -85,7 +103,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
 
     # Intercept keras initializer
     if kernel_initializer and not isinstance(kernel_initializer, CustomInitializer):
-      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer)
+      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer, data_format)
 
     # Call super class constructor
     super().__init__(filters,
@@ -109,6 +127,11 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
     self.receives_type0_inputs = False          # may be set to True by TF2Upstride, if the inputs will be real tensors
     self.upstride_conv_op = upstride_conv2d     # the backend op to call
 
+    # get filter layout
+    self.filter_layout = _DATA_FORMAT_TO_FILTER_LAYOUT.get(data_format, None)
+    if self.filter_layout is None:
+      raise ValueError(f"Cannot infer Conv2D filter layout from data format '{data_format}'")
+
     # Handling casual paddiing in TF prior to TF2.3
     if version.parse(tf.__version__) < version.parse("2.3"):
       self._is_causal = self.padding.lower() == 'causal'
@@ -123,9 +146,16 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                        'Received groups={}, but the input has {} channels (full input shape is {}).'
                        .format(self.groups, input_channel, input_shape))
 
-    # Setup kernel tensor
-    kernel_shape = append_outermost_dim(self.upstride_datatype,
-                                        (self.filters, input_channel // self.groups) + self.kernel_size)
+    # Setup kernel tensor depending on the data format
+    if self.filter_layout == 'OIHW':
+      kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                          (self.filters, input_channel // self.groups, *self.kernel_size))
+    elif self.filter_layout == 'OHWI':
+      kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                          (self.filters, *self.kernel_size, input_channel // self.groups))
+    else:
+      raise ValueError(f'Conv2D filter layout not implemented: {self.filter_layout}')
+
     self.kernel = self.add_weight(
         name='kernel',
         shape=kernel_shape,
@@ -166,6 +196,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                                    dilations=self.dilation_rate,
                                    padding=self.padding.upper(),
                                    data_format="NCHW" if self.data_format == 'channels_first' else "NHWC",
+                                   filter_layout=self.filter_layout,
                                    groups=self.groups,
                                    name=self.name,
                                    require_input_grad=self.require_input_grad or self.require_input_grad is None,
@@ -211,7 +242,7 @@ class GenericDepthwiseConv2D(GenericConv2D):
 
     # Intercept keras initializer
     if depthwise_initializer and not isinstance(depthwise_initializer, CustomInitializer):
-      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer, depthwise=True)
+      depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer, data_format, depthwise=True)
 
     super().__init__(
         filters=None,
@@ -247,12 +278,16 @@ class GenericDepthwiseConv2D(GenericConv2D):
     if self.groups is None:
       raise ValueError('The channel dimension of the inputs to `DepthwiseConv2D` should be defined. Found `None`.')
 
-    # compute kernel shape (O, I, H, W)
-    depthwise_kernel_shape = append_outermost_dim(self.upstride_datatype,
-                                                  (self.groups * self.depth_multiplier,
-                                                   1,
-                                                   self.kernel_size[0],
-                                                   self.kernel_size[1]))
+    # setup kernel tensor depending on the data format
+    num_output_channels = self.groups * self.depth_multiplier
+    if self.filter_layout == 'OIHW':
+      depthwise_kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                                    (num_output_channels, 1, *self.kernel_size))
+    elif self.filter_layout == 'OHWI':
+      depthwise_kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                                    (num_output_channels, *self.kernel_size, 1))
+    else:
+      raise ValueError(f'Conv2D filter layout not implemented: {self.filter_layout}')
 
     # initialize kernel tensor
     self.kernel = self.add_weight(
@@ -268,7 +303,7 @@ class GenericDepthwiseConv2D(GenericConv2D):
     if self.use_bias:
       self.bias = self.add_weight(
           name='bias',
-          shape=append_outermost_dim(self.upstride_datatype, (self.groups * self.depth_multiplier,)),
+          shape=append_outermost_dim(self.upstride_datatype, (num_output_channels,)),
           initializer=self.bias_initializer,
           regularizer=self.bias_regularizer,
           constraint=self.bias_constraint,

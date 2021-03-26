@@ -13,7 +13,7 @@ from upstride.internal.initializers import ConvInitializer, DepthwiseConvInitial
 
 
 class HInitializer(CustomInitializer):
-  def __init__(self, criterion, seed=None):
+  def __init__(self, criterion, seed=None, data_format=None):
     """
     Constructs a quaternion initializer.
     Inspired by https://arxiv.org/pdf/1806.04418.pdf (section 3.4)
@@ -21,6 +21,7 @@ class HInitializer(CustomInitializer):
         :criterion:  magnitude initializer setting ('up2_init_glorot', 'up2_init_he')
         :seed:       Random seed value
     """
+    super().__init__(data_format)
     self.fan_in = None
     self.fan_out = None
     self.criterion = criterion
@@ -81,19 +82,21 @@ class HInitializer(CustomInitializer):
     Returns:
       A JSON-serializable Python dict.
     """
-    return {'criterion': self.criterion,
-            'seed': self.seed}
+    config = super().get_config()
+    config.update({'criterion': self.criterion,
+                   'seed': self.seed})
+    return config
 
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
 class HInitializerConv(HInitializer, ConvInitializer):
-  def __init__(self, criterion, groups, seed=None):
-    HInitializer.__init__(self, criterion, seed)
+  def __init__(self, criterion, groups, seed=None, data_format=None):
+    HInitializer.__init__(self, criterion, seed, data_format)
     self.groups = groups
 
   def __call__(self, shape, dtype=None):
     assert shape[0] == 4
-    self.compute_fans(shape, self.groups)
+    self.compute_fans(shape, self.groups, self.data_format)
     return super().__call__(shape, dtype=dtype)
 
   def get_config(self):
@@ -104,13 +107,13 @@ class HInitializerConv(HInitializer, ConvInitializer):
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
 class HInitializerDepthwiseConv(HInitializer, DepthwiseConvInitializer):
-  def __init__(self, criterion, depth_multiplier, seed=None):
-    HInitializer.__init__(self, criterion, seed)
+  def __init__(self, criterion, depth_multiplier, seed=None, data_format=None):
+    HInitializer.__init__(self, criterion, seed, data_format)
     self.depth_multiplier = depth_multiplier
 
   def __call__(self, shape, dtype=None):
     assert shape[0] == 4
-    self.compute_fans(shape, self.depth_multiplier)
+    self.compute_fans(shape, self.depth_multiplier, self.data_format)
     return super().__call__(shape, dtype=dtype)
 
   def get_config(self):
@@ -121,6 +124,9 @@ class HInitializerDepthwiseConv(HInitializer, DepthwiseConvInitializer):
 
 @tf.keras.utils.register_keras_serializable("upstride_type2")
 class HInitializerDense(HInitializer, DenseInitializer):
+  def __init__(self, criterion):
+    HInitializer.__init__(self, criterion=criterion, data_format='NC')
+
   def __call__(self, shape, dtype=None):
     # assuming [4, I, O] kernel layout
     assert shape[0] == 4

@@ -91,6 +91,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
 
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
+    upstride::FilterLayout filterLayout;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
     upstride::IntPair stride;
@@ -112,6 +113,10 @@ class UpstrideConv2DOpKernel : public OpKernel {
         std::string dataFormatStr;
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
+
+        std::string filterLayoutStr;
+        OP_REQUIRES_OK(context, context->GetAttr("filter_layout", &filterLayoutStr));
+        filterLayout = upstride::filterLayoutFromString(filterLayoutStr);
 
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
         OP_REQUIRES_OK(context, context->GetAttr("use_bias", &useBias));
@@ -138,7 +143,7 @@ class UpstrideConv2DOpKernel : public OpKernel {
 
             // initialize a descriptor
             const upstride::Conv2DFwdDescriptor descriptor(
-                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, useBias, realValuedInput);
+                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, filterLayout, useBias, realValuedInput);
 
             // allocate output tensor
             OutputTensorTF<Device, T> output(context, device, toTensorflowShape(descriptor.getOutputShape()));
@@ -165,6 +170,7 @@ template <typename Device, typename T>
 class UpstrideConv2DGradOpKernel : public OpKernel {
     const upstride::Algebra algebra;  //!< algebra to use within the Op
     upstride::DataFormat dataFormat;
+    upstride::FilterLayout filterLayout;
     upstride::Padding paddingPreset;
     upstride::IntTuple explicitPadding;
     upstride::IntPair stride;
@@ -195,6 +201,10 @@ class UpstrideConv2DGradOpKernel : public OpKernel {
         OP_REQUIRES_OK(context, context->GetAttr("data_format", &dataFormatStr));
         dataFormat = upstride::dataFormatFromString(dataFormatStr);
 
+        std::string filterLayoutStr;
+        OP_REQUIRES_OK(context, context->GetAttr("filter_layout", &filterLayoutStr));
+        filterLayout = upstride::filterLayoutFromString(filterLayoutStr);
+
         OP_REQUIRES_OK(context, context->GetAttr("require_input_grad", &requireInputGrad));
         OP_REQUIRES_OK(context, context->GetAttr("type0_inputs", &realValuedInput));
         OP_REQUIRES_OK(context, context->GetAttr("groups", &groups));
@@ -219,7 +229,7 @@ class UpstrideConv2DGradOpKernel : public OpKernel {
 
             // initialize a descriptor
             const upstride::Conv2DBwdDescriptor descriptor(
-                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, requireInputGrad, realValuedInput);
+                input.getShape(), filter.getShape(), stride, dilation, paddingPreset, explicitPadding, groups, algebra, dataFormat, filterLayout, requireInputGrad, realValuedInput);
 
             // allocate output tensor
             OutputTensorTF<Device, T> filterGrad(context, device, context->input(INPUT_FILTER_IDX).shape(), OUPUT_FILTERGRAD_IDX);
@@ -270,7 +280,7 @@ class UpstrideDenseOpKernel : public OpKernel {
             OutputTensorTF<Device, T> output(context, device, outShape);
 
             // setup descriptor
-            const upstride::DenseFwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::DataFormat::IO, useBias);
+            const upstride::DenseFwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::FilterLayout::IO, useBias);
 
             // create an allocator instance
             TFAllocator allocator(context, device);
@@ -328,7 +338,7 @@ class UpstrideDenseGradOpKernel : public OpKernel {
             TFAllocator allocator(context, device);
 
             // execute the operation
-            const upstride::DenseBwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::DataFormat::IO, requireInputGrad);
+            const upstride::DenseBwdDescriptor descriptor(input.getShape(), filter.getShape(), algebra, upstride::FilterLayout::IO, requireInputGrad);
             upstride::denseBwd<Device, T>(device, allocator, input, filter, grad, filterGrad, inputGrad, descriptor);
         } catch (std::exception& ex) {
             context->CtxFailure(__FILE__, __LINE__, errors::Internal(ex.what()));

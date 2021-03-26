@@ -7,6 +7,9 @@
         if (!CTX->GetAttr(NAME, &VAR).ok()) return tensorflow::errors::InvalidArgument("Cannot get " NAME); \
     }
 
+#define DEFAULT_CONV2D_FILTER_LAYOUT "OIHW"
+    //!< default conv2d filter memory layout; OIHW channels-first-compliant, consider to change
+
 REGISTER_OP("UpstrideConv2D")
     .Attr("T: {float16, float32}")
     .Attr("uptype: int = 0")
@@ -24,6 +27,7 @@ REGISTER_OP("UpstrideConv2D")
     .Attr(tensorflow::GetExplicitPaddingsAttrString())
 #endif
     .Attr(tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("filter_layout: string = '" DEFAULT_CONV2D_FILTER_LAYOUT "'")
     .Attr("groups: int = 1")
     .Attr("require_input_grad: bool = true")
     .Attr("type0_inputs: bool = false")
@@ -42,6 +46,11 @@ REGISTER_OP("UpstrideConv2D")
             std::string dataFormatStr;
             GET_FIELD(ctx, "data_format", dataFormatStr);
             const upstride::DataFormat dataFormat = upstride::dataFormatFromString(dataFormatStr);
+
+            // get filter layout
+            std::string filterLayoutStr;
+            GET_FIELD(ctx, "filter_layout", filterLayoutStr);
+            const upstride::FilterLayout filterLayout = upstride::filterLayoutFromString(filterLayoutStr);
 
             // get padding
             std::string paddingStr;
@@ -79,22 +88,23 @@ REGISTER_OP("UpstrideConv2D")
             auto inputShape = ctx->input(INPUT_IDX);
 
             // check filter rank
-            if (!ctx->WithRank(ctx->input(FILTER_IDX), upstride::Conv2DKernelLayout::rank(algebra), &filterShape).ok())
+            if (!ctx->WithRank(ctx->input(FILTER_IDX), upstride::Conv2DFilterLayout::rank(algebra), &filterShape).ok())
                 return tensorflow::errors::InvalidArgument("Kernel rank mismatch: a tensor of " +
-                                                           std::to_string(upstride::Conv2DKernelLayout::rank(algebra)) +
+                                                           std::to_string(upstride::Conv2DFilterLayout::rank(algebra)) +
                                                            " dimensions expected");
 
             // infer output shape
+            const upstride::Conv2DFilterLayout filter(filterLayout, algebra);
             auto result = upstride::frontend_tf::computeWindowedOutputSize(ctx,
                 ctx->Dim(inputShape, getWidthDimensionNumber(dataFormat)),
-                ctx->Dim(filterShape, upstride::Conv2DKernelLayout::widthDim(algebra)),
+                ctx->Dim(filterShape, filter.widthDim()),
                 dilation.x, stride.x, padding, padBefore.x, padAfter.x, outWidth);
             if (!result.ok())
                 return result;
 
             result = upstride::frontend_tf::computeWindowedOutputSize(ctx,
                 ctx->Dim(inputShape, getHeightDimensionNumber(dataFormat)),
-                ctx->Dim(filterShape, upstride::Conv2DKernelLayout::heightDim(algebra)),
+                ctx->Dim(filterShape, filter.heightDim()),
                 dilation.y, stride.y, padding, padBefore.y, padAfter.y, outHeight);
             if (!result.ok())
                 return result;
@@ -112,13 +122,13 @@ REGISTER_OP("UpstrideConv2D")
             switch (dataFormat) {
                 case upstride::DataFormat::NCHW:
                     ctx->set_output(0, ctx->MakeShape({
-                        outputBatchSize, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra)), outHeight, outWidth
+                        outputBatchSize, ctx->Dim(filterShape, filter.numOutputChannelsDim()), outHeight, outWidth
                     }));
                     break;
 
                 case upstride::DataFormat::NHWC:
                     ctx->set_output(0, ctx->MakeShape({
-                        outputBatchSize, outHeight, outWidth, ctx->Dim(filterShape, upstride::Conv2DKernelLayout::numOutputChannelsDim(algebra))
+                        outputBatchSize, outHeight, outWidth, ctx->Dim(filterShape, filter.numOutputChannelsDim())
                     }));
                     break;
 
@@ -151,6 +161,7 @@ REGISTER_OP("UpstrideConv2DGrad")
     .Attr(tensorflow::GetExplicitPaddingsAttrString())
 #endif
     .Attr(tensorflow::GetConvnetDataFormatAttrString())
+    .Attr("filter_layout: string = '" DEFAULT_CONV2D_FILTER_LAYOUT "'")
     .Attr("groups: int = 1")
     .Attr("require_input_grad: bool = true")
     .Attr("type0_inputs: bool = false")

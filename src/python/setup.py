@@ -11,7 +11,7 @@ setuptools.setup(
     url="https://upstride.io",
     packages=setuptools.find_packages(),
     include_package_data=True,
-    package_data={'': ['libupstride.so', 'libdnnl.so.1']},
+    package_data={'': ['libupstride.so', 'libdnnl.so']},
     classifiers=[
         'Development Status :: 1 - Beta',
         'Intended Audience :: Developers',

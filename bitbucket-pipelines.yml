@@ -24,7 +24,7 @@ pipelines:
             - make -j4
             - cd ..
             - cp build/libs/libupstride.so src/python/upstride/internal
-            - cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/internal
+            - cp build/core/thirdparty/onednn/src/libdnnl.so src/python/upstride/internal
             - pip3 install --upgrade pip && pip3 install packaging pytest
             - PYTHONPATH=src/python python test.py
             - echo "All good."

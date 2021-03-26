@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 from packaging import version
 from upstride.internal.custom_ops import upstride_ops
-from src.python.upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase
+from src.python.upstride.internal.test import setUpModule, apply_some_non_linearity, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, UnittestTestCase
 from upstride.internal.clifford_product import CliffordProduct
 from upstride.type0.tf.keras.layers import DepthwiseConv2D, Conv2D, Dense
 import platform
@@ -11,30 +11,30 @@ clifford_product = CliffordProduct((0, 0, 0), [""])
 setUpModule()
 
 
-class Type0Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Conv2D)
+class TestSetType0Conv2D(Conv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, Conv2D)
 
 
-class Type0PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Conv2D)
+class TestSetType0PointwiseConv2D(PointwiseConv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, Conv2D)
 
 
-class Type0DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, DepthwiseConv2D)
+class TestSetType0DepthwiseConv2D(DepthwiseConv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, DepthwiseConv2D)
 
 
-class Type0DenseTestSet(DenseTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Dense)
+class TestSetType0Dense(DenseTestSet):
+  def setup(self):
+    super().setup(clifford_product, Dense)
 
 
-class Type0InputGradientAndTypeTest(InputGradientAndTypeTest, unittest.TestCase):
-  def setUp(self):
+class TestSetType0InputGradientAndType(InputGradientAndTypeTest):
+  def setup(self):
     from upstride.type0.tf.keras import layers
-    self.setup(layers)
+    super().setup(layers)
 
 
 def get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype=tf.float32, batch_size=2, val=0.5):
@@ -68,7 +68,7 @@ def get_output_and_gradients(model, kernel, inputs):
       dbias = None
   return output, dinputs, dweights, dbias
 
-class TestConv2D(TestCase):
+class TestConv2D(UnittestTestCase):
   def run_conv2d_test(self, img_size=224, filter_size=3, in_channels=3, out_channels=64, padding='VALID', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32, batch_size=2):
     """ Runs a single convolution and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype, batch_size)
@@ -224,7 +224,7 @@ class TestConv2D(TestCase):
     self.assert_and_print(grad_test_inputs_channels_first, grad_ref_inputs_channels_first, "Grouped Conv2DFwd", "dinputs")
 
 
-class TestConv2DGrad(TestCase):
+class TestConv2DGrad(UnittestTestCase):
   def run_conv2dgrad_test(self, img_size=128, filter_size=3, in_channels=2, out_channels=1, padding='SAME', strides=[1, 1], dilations=[1, 1], use_bias=False, dtype=tf.float32, batch_size=2):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output """
     input_upstride, filter_upstride, input_tf, filter_tf, bias = get_inputs_and_filters(in_channels, img_size, filter_size, out_channels, use_bias, dtype, batch_size)
@@ -299,7 +299,7 @@ class TestConv2DGrad(TestCase):
       self.run_conv2dgrad_test(img_size=7, filter_size=1, in_channels=8, out_channels=16, padding='VALID', use_bias=True, dtype=tf.float16)
 
 
-class TestDepthwiseConv2D(TestCase):
+class TestDepthwiseConv2D(UnittestTestCase):
   def run_dw_conv2d_test(self, img_size=128, filter_size=3, channels=2, use_bias=False, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=2):
     """ Runs a single convolution forward and backward and compares the result with TensorFlow output
     """
@@ -344,7 +344,7 @@ class TestDepthwiseConv2D(TestCase):
     self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2])
     self.run_dw_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2], use_bias=True)
 
-class TestDense(TestCase):
+class TestDense(UnittestTestCase):
   def get_inputs_and_filters_dense(self, batch_size, in_features, out_features, dtype=tf.float32):
     inputs = tf.random.uniform([batch_size, in_features], minval=-1, maxval=1, dtype=dtype)
     weights = tf.random.uniform([in_features, out_features], minval=-1, maxval=1, dtype=dtype)

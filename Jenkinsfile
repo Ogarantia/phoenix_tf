@@ -66,34 +66,47 @@ pipeline {
                 }
             }
         }
-        stage('run unittests') {
+        stage('run GPU unittests') {
             options {
                 timeout(time: 300, unit: "SECONDS")
             }
             steps {
-                // run tests on GPU
                 script {
                     docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
                         docker.image(env.BUILD_DEV).inside(){
-                            sh("""PYTHONPATH=src/python python3 test.py""")
-                        }
-                    }
-                }
-                // run tests on CPU
-                script {
-                    docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
-                        docker.image(env.BUILD_DEV).inside("--gpus all"){
-                            sh("""CUDA_VISIBLE_DEVICES= PYTHONPATH=src/python python3 test.py""")
+                            sh("PYTHONPATH=src/python python3 test.py")
                         }
                     }
                 }
             }
             post {
                 success {
-                    success('Tests passed')
+                    success('GPU tests passed')
                 }
                 failure {
-                    error("Unittests failed")
+                    error("GPU unittests failed")
+                }
+            }
+        }
+        stage('run CPU unittests') {
+            options {
+                timeout(time: 300, unit: "SECONDS")
+            }
+            steps {
+                script {
+                    docker.withRegistry("https://${REGISTRY_DEV}", 'registry-dev'){
+                        docker.image(env.BUILD_DEV).inside(){
+                            sh("CUDA_VISIBLE_DEVICES= PYTHONPATH=src/python python3 test.py")
+                        }
+                    }
+                }
+            }
+            post {
+                success {
+                    success('CPU tests passed')
+                }
+                failure {
+                    error("CPU unittests failed")
                 }
             }
         }

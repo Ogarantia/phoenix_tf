@@ -10,9 +10,9 @@ RUN export IMPORTLIBPATH=`python3 -c "import importlib; print(importlib.__path__
     pip install /opt/upstride-*.whl && \
     export UPSTRIDELIBPATH=`python3 -c "import upstride; print(upstride.__path__._path[0])"` && \
     ls $UPSTRIDELIBPATH/libupstride.so && \
-    ls $UPSTRIDELIBPATH/libdnnl.so.1 && \
+    ls $UPSTRIDELIBPATH/libdnnl.so && \
     ln -s $UPSTRIDELIBPATH/libupstride.so $IMPORTLIBPATH/libupstride.so && \
-    ln -s $UPSTRIDELIBPATH/libdnnl.so.1 $IMPORTLIBPATH/libdnnl.so.1 && \
+    ln -s $UPSTRIDELIBPATH/libdnnl.so $IMPORTLIBPATH/libdnnl.so && \
     rm /opt/upstride-*.whl && \
     unset IMPORTLIBPATH && \
     unset UPSTRIDELIBPATH

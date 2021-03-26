@@ -2,7 +2,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 from upstride.type2.tf.keras.layers import TF2Upstride, Upstride2TF, Conv2D, Dense, DepthwiseConv2D
-from src.python.upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, TestCase, apply_some_non_linearity
+from src.python.upstride.internal.test import setUpModule, Conv2DTestSet, PointwiseConv2DTestSet, DepthwiseConv2DTestSet, DenseTestSet, InputGradientAndTypeTest, UnittestTestCase, apply_some_non_linearity
 from src.python.upstride.internal.test_exhaustive import PointwiseConv2DExhaustiveTestSet
 from upstride.internal.clifford_product import CliffordProduct
 from upstride import utils
@@ -12,35 +12,35 @@ import platform
 clifford_product = CliffordProduct((3, 0, 0), ["", "12", "23", "13"])
 setUpModule()
 
-class Type2Conv2DTestSet(Conv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Conv2D)
+class TestSetType2Conv2D(Conv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, Conv2D)
 
 
-class Type2PointwiseConv2DTestSet(PointwiseConv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Conv2D)
+class TestSetType2PointwiseConv2D(PointwiseConv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, Conv2D)
+
+
+class TestSetType2DepthwiseConv2D(DepthwiseConv2DTestSet):
+  def setup(self):
+    super().setup(clifford_product, DepthwiseConv2D)
+
+
+class TestSetType2Dense(DenseTestSet):
+  def setup(self):
+    super().setup(clifford_product, Dense)
+
+
+class TestSetType2InputGradientAndType(InputGradientAndTypeTest):
+  def setup(self):
+    from upstride.type2.tf.keras import layers
+    super().setup(layers)
 
 
 class TestSetType2PointwiseConv2DExhaustive(PointwiseConv2DExhaustiveTestSet):
   def setup(self):
     super().setup(clifford_product, Conv2D)
-
-
-class Type2DepthwiseConv2DTestSet(DepthwiseConv2DTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, DepthwiseConv2D)
-
-
-class Type2DenseTestSet(DenseTestSet, unittest.TestCase):
-  def setUp(self):
-    self.setup(clifford_product, Dense)
-
-
-class Type2InputGradientAndTypeTest(InputGradientAndTypeTest, unittest.TestCase):
-  def setUp(self):
-    from upstride.type2.tf.keras import layers
-    self.setup(layers)
 
 
 def quaternion_mult_naive(tf_op, inputs, kernels, bias=(0, 0, 0, 0)):
@@ -137,7 +137,7 @@ class TestType2Conv2DBasic(unittest.TestCase):
 
   def test_conv2d_tf(self):
     # Run a convolution in tensorflow and in upstride with random inputs and compare the results
-    upstride_conv = Conv2D(1, (1, 1), use_bias=False)
+    upstride_conv = Conv2D(1, (1, 1), data_format='channels_first', use_bias=False)
     upstride_conv(tf.random.uniform((4, 1, 1, 1)))  # run a first time to init the kernel
     kernels = upstride_conv.kernel  # take the quaternion kernel
 
@@ -176,14 +176,14 @@ class TestType2Conv2DBasic(unittest.TestCase):
       kernels = tf.concat([kernel_r, kernel_i, kernel_j, kernel_k], axis=0)
 
       # define the keras operation, hijack the kernel and run it
-      conv_op = Conv2D(1, (1, 1), use_bias=False)
+      conv_op = Conv2D(1, (1, 1), data_format='channels_first', use_bias=False)
       conv_op(inputs)  # run a first time to init the kernel
       conv_op.kernel = kernels
       outputs = conv_op(inputs)
       self.assertEqual(list(outputs.numpy().flatten()), expected_outputs[i])
 
 
-class TestType2Conv2D(TestCase):
+class TestType2Conv2D(UnittestTestCase):
   """ Implements quaternion convolution unitary testing varying img_size, filter_size,
       in_channels, out_channels, padding, strides, dilations and use_bias.
   """
@@ -193,7 +193,7 @@ class TestType2Conv2D(TestCase):
     py_inputs_channels_first = [tf.transpose(_, utils.permutation("NHWC", "NCHW")) for _ in py_inputs]
     cpp_inputs = tf.concat(py_inputs_channels_first, axis=0)
 
-    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias)
+    upstride_conv = Conv2D(filters=out_channels, kernel_size=filter_size, strides=strides, padding=padding, dilation_rate=dilations, use_bias=use_bias, data_format='channels_first')
     upstride_conv.require_input_grad = True
     upstride_conv(cpp_inputs) # runs a first time to initialize the kernel
     weights = tf.cast(tf.random.uniform(upstride_conv.kernel.shape, dtype=tf.int32, minval=-5, maxval=5), dtype=tf.float32)
@@ -258,7 +258,7 @@ class TestType2Conv2D(TestCase):
       tf.keras.backend.set_image_data_format('channels_last')  # FIXME We should find a proper way to pass 'channels_last'
 
 
-class TestType2DepthwiseConv2D(TestCase):
+class TestType2DepthwiseConv2D(UnittestTestCase):
   def run_depthwise_conv2d_test(self, img_size=128, filter_size=3, channels=2, use_bias=False, padding='SAME', strides=[1, 1], dilations=[1, 1], batch_size=3):
     """ Runs a single depthwise convolution forward and backward and compares the result with TensorFlow output
     """
@@ -320,7 +320,7 @@ class TestType2DepthwiseConv2D(TestCase):
     self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2])
     self.run_depthwise_conv2d_test(img_size=32, filter_size=4, channels=3, strides=[2, 2], use_bias=True)
 
-class TestType2Dense(TestCase):
+class TestType2Dense(UnittestTestCase):
   def get_gradient_and_output(self, inputs, function, kernels, bias):
     if type(inputs) == list: # TENSORFLOW
       with tf.GradientTape(persistent=True) as gt:

@@ -57,12 +57,12 @@ install_wheel: PYTHON_IMPORTLIB_PATH=`$(PYTHON) -c "import importlib; print(impo
 install_wheel: wheel
 	@$(PYTHON) -m pip install build/upstride*`arch`.whl
 	@ln -s $(PWD)/build/cython/libupstride.so $(PYTHON_IMPORTLIB_PATH)/libupstride.so
-	@ln -s $(PWD)/build/cython/libdnnl.so.1   $(PYTHON_IMPORTLIB_PATH)/libdnnl.so.1
+	@ln -s $(PWD)/build/cython/libdnnl.so   $(PYTHON_IMPORTLIB_PATH)/libdnnl.so
 
 # copy shared objects side-by-side with Python code
 install:
 	@cp build/libs/libupstride.so src/python/upstride/internal
-	@cp build/core/thirdparty/onednn/src/libdnnl.so.1 src/python/upstride/internal
+	@cp build/core/thirdparty/onednn/src/libdnnl.so src/python/upstride/internal
 
 # build docker with the compilation environment
 dev_docker:

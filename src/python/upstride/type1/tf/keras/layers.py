@@ -39,7 +39,7 @@ class Conv2D(convolution.GenericConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(kernel_initializer):
-      kernel_initializer = CInitializerConv(criterion=kernel_initializer, groups=groups)
+      kernel_initializer = CInitializerConv(criterion=kernel_initializer, groups=groups, data_format=data_format)
     super().__init__(filters=filters,
                      kernel_size=kernel_size,
                      strides=strides,
@@ -81,7 +81,7 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(depthwise_initializer):
-      depthwise_initializer = CInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier)
+      depthwise_initializer = CInitializerDepthwiseConv(criterion=depthwise_initializer, depth_multiplier=depth_multiplier, data_format=data_format)
     super().__init__(
         kernel_size=kernel_size,
         strides=strides,

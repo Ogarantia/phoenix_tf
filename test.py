@@ -7,10 +7,10 @@ import tensorflow as tf
 
 # import testcases
 from src.python.upstride.internal.clifford_product import TestCliffordProduct
-from src.python.upstride.type0.tf.keras.test_layers import Type0Conv2DTestSet, Type0PointwiseConv2DTestSet, Type0DepthwiseConv2DTestSet, Type0DenseTestSet, Type0InputGradientAndTypeTest
-from src.python.upstride.type1.tf.keras.test_layers import *
-from src.python.upstride.type2.tf.keras.test_layers import Type2Conv2DTestSet, Type2PointwiseConv2DTestSet, Type2DepthwiseConv2DTestSet, Type2DenseTestSet, Type2InputGradientAndTypeTest
-from src.python.upstride.type3.tf.keras.test_layers import *
+from src.python.upstride.type0.tf.keras.test_layers import TestSetType0Conv2D, TestSetType0PointwiseConv2D, TestSetType0DepthwiseConv2D, TestSetType0Dense, TestSetType0InputGradientAndType
+from src.python.upstride.type1.tf.keras.test_layers import TestSetType1Conv2D, TestSetType1PointwiseConv2D, TestSetType1DepthwiseConv2D, TestSetType1Dense, TestSetType1InputGradientAndType
+from src.python.upstride.type2.tf.keras.test_layers import TestSetType2Conv2D, TestSetType2PointwiseConv2D, TestSetType2DepthwiseConv2D, TestSetType2Dense, TestSetType2InputGradientAndType
+from src.python.upstride.type3.tf.keras.test_layers import TestSetType3Conv2D, TestSetType3PointwiseConv2D, TestSetType3DepthwiseConv2D, TestSetType3Dense, TestSetType3InputGradientAndType
 
 # import exhaustive testcases
 from src.python.upstride.type2.tf.keras.test_layers import TestSetType2PointwiseConv2DExhaustive
@@ -24,5 +24,10 @@ if __name__ == "__main__":
   gpus = tf.config.experimental.list_physical_devices('GPU')
   for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
-  pytest.main(sys.argv)   # pass main arguments, including this filename
+  code = pytest.main(sys.argv)   # pass main arguments, including this filename
+  # FIXME: clean_up throws errors when imported from src.python.upstride.internal.layers
+  # or when layers are imported from src.python.upstride.typeX.tf.keras
+  from src.python.upstride.type3.tf.keras.test_layers import layers
   layers.clean_up()
+
+  exit(code)

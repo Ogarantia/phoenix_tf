@@ -117,7 +117,7 @@ setup(
     include_package_data=True,
     packages=['upstride'],
     package_dir={'upstride': 'upstride/internal'},
-    package_data={'upstride': ['libupstride.so', 'libdnnl.so.1']},
+    package_data={'upstride': ['libupstride.so', 'libdnnl.so']},
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: C++",

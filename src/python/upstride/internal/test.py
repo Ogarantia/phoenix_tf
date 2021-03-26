@@ -1,7 +1,12 @@
-import unittest
+from unittest import TestCase
+import pytest
 import tensorflow as tf
 from upstride import utils
 from upstride.internal.layers import TYPE0
+from upstride.internal.convolution import _DATA_FORMAT_TO_FILTER_LAYOUT
+
+
+DEFAULT_ERROR_THRESHOLD = 2e-3
 
 
 def setUpModule():
@@ -136,7 +141,7 @@ class CliffordProductLayer(tf.keras.layers.Layer):
 
 
 # FIXME: consider removing this class
-class TestCase(unittest.TestCase):
+class UnittestTestCase(TestCase):
   """ Base class for unittests containing handy stuff """
   DEFAULT_ERROR_THRESHOLD = 5e-3
   HALF_FLOAT_ERROR_THRESHOLD = 5e-2
@@ -176,6 +181,7 @@ class TestBase:
     self.random_tensor = random_integer_tensor if underlying_dtype is tf.int32 else random_float_tensor
     self.require_input_grad = True
     self.receives_type0_inputs = False
+    self.RELATIVE_ERROR_THRESHOLD = DEFAULT_ERROR_THRESHOLD
 
   def assert_equal_tensors(self, tensor1, tensor2):
     """ Assert that two tensors are numerically (almost) equal
@@ -185,15 +191,13 @@ class TestBase:
     if self.underlying_dtype is tf.int32:
       assert_zero_integer_difference(tensor1, tensor2)
     else:
-      RELATIVE_ERROR_THRESHOLD = 2e-3
-      assert_small_float_difference(tensor1, tensor2, RELATIVE_ERROR_THRESHOLD)
+      assert_small_float_difference(tensor1, tensor2, self.RELATIVE_ERROR_THRESHOLD)
 
   def verify_kwargs(self, **kwargs):
     """ Verify that certain parameters do not appear in kwargs
     """
     assert self.kernel_initializer not in kwargs, 'kernel_initializer option is not supported in this test'
     assert 'bias_initializer' not in kwargs, 'bias_initializer option is not supported in this test'
-    assert 'data_format' not in kwargs, 'data_format option is not supported in this test'
 
   def create_input_tensor(self, test_shape, dtype):
     """ Create a random input tensor suitable for the used algebra
@@ -207,7 +211,7 @@ class TestBase:
     """
     kwargs[self.kernel_initializer] = self.random_tensor
     if self.op_requires_data_format:
-      kwargs['data_format'] = self.test_data_format
+      kwargs.setdefault('data_format', self.default_test_data_format)
     if kwargs['use_bias']:
       kwargs['bias_initializer'] = self.random_tensor
 
@@ -307,6 +311,7 @@ class TestBase:
       tf.keras.backend.set_floatx('float32')
 
 
+@pytest.mark.parametrize('data_format', ['channels_first', 'channels_last'])
 class Conv2DTestBase(TestBase):
   def setup(self, clifford_product, ref_op_class, test_op_class, kernel_initializer, underlying_dtype=tf.int32):
     """ Type-agnostic convolution forward and backward pass test base
@@ -318,26 +323,42 @@ class Conv2DTestBase(TestBase):
     :underlying_dtype:    underlying tensor type used to generate values
     """
     super().setup(clifford_product, test_op_class, ref_op_class, kernel_initializer, True, underlying_dtype)
-    self.test_data_format = 'channels_first'
+    self.default_test_data_format = 'channels_first'
     self.ref_data_format = 'channels_last'
 
   def get_ref_compliant_kernels(self, test_op):
     """ Prepare kernels initialized by the tested operation so that they can be used with the reference operation
     :test_op:             tested operation, which was run already
     """
-    return tf.transpose(super().get_ref_compliant_kernels(test_op), utils.permutation("nOIHW", "nHWIO"))
+    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    return tf.transpose(super().get_ref_compliant_kernels(test_op), utils.permutation(upstride_layout, "nHWIO"))
 
-  def transpose_ref_to_channel_first(self, ref_output, ref_input_grad, ref_kernel_grad):
-    """ Transposes reference tensors to channel first
+  def transpose_ref_tensors(self, test_op, ref_output, ref_input_grad, ref_kernel_grad):
+    """ Transposes reference tensors to match test op specs
     :ref_output:          reference output tensor
     :ref_input_grad:      reference tensor with gradient wrt input
-    :ref_kernel_grad:      reference tensor with gradient wrt kernel
+    :ref_kernel_grad:     reference tensor with gradient wrt kernel
     """
-    ref_output = transpose_to_channel_first(ref_output)
-    ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", "nOIHW"))
-    if self.require_input_grad:
-      ref_input_grad = transpose_to_channel_first(ref_input_grad)
+    # transpose kernel tensor
+    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", upstride_layout))
+    # transpose outputs assuming channels-last reference op
+    if test_op.data_format == 'channels_first':
+      ref_output = transpose_to_channel_first(ref_output)
+      if self.require_input_grad:
+        ref_input_grad = transpose_to_channel_first(ref_input_grad)
     return ref_output, ref_input_grad, ref_kernel_grad
+
+  def get_strided_tensor(self, tensor, strides, data_format):
+    """ Stride a convolution input tensor according to the data format
+    :tensor:              convolution input tensor to be strided
+    :strides:             convolution strides
+    :data_format:         channels first/last tensor format convention
+    """
+    if data_format == 'channels_first':
+      return tensor[:, :, ::strides[0], ::strides[1]]
+    else:
+      return tensor[:, ::strides[0], ::strides[1], :]
 
   def run_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
     """ Runs a single instance of a forward and backward pass test for a given parameter set.
@@ -351,16 +372,16 @@ class Conv2DTestBase(TestBase):
 
     # generate random channel-last input
     input_tensor = self.create_input_tensor(test_shape, dtype)
-    input_tensor_channel_first = transpose_to_channel_first(input_tensor)
+    test_input_tensor = transpose_to_channel_first(input_tensor) if kwargs['data_format'] == 'channels_first' else input_tensor
 
-    test_op = self.prepare_test_op(input_tensor_channel_first, **kwargs)
-    test_output, test_input_grad, test_kernel_grad, test_bias_grad = self.compute_output_and_gradients(test_op, input_tensor_channel_first, True)
+    test_op = self.prepare_test_op(test_input_tensor, **kwargs)
+    test_output, test_input_grad, test_kernel_grad, test_bias_grad = self.compute_output_and_gradients(test_op, test_input_tensor, True)
 
     ref_op = self.prepare_ref_op(input_tensor, test_op, **kwargs)
     ref_output, ref_input_grad, ref_kernel_grad, ref_bias_grad = self.compute_output_and_gradients(ref_op, input_tensor, False)
 
-    # do transpositions to channel-first to compare with test tensors
-    ref_output, ref_input_grad, ref_kernel_grad = self.transpose_ref_to_channel_first(ref_output, ref_input_grad, ref_kernel_grad)
+    # do transpositions  to compare with test tensors
+    ref_output, ref_input_grad, ref_kernel_grad = self.transpose_ref_tensors(test_op, ref_output, ref_input_grad, ref_kernel_grad)
 
     # assert on the difference between reference and test tensors
     self.assert_equal_tensors(ref_output, test_output)
@@ -391,70 +412,78 @@ class Conv2DTestBase(TestBase):
 
     # generate channel-last random input
     input_tensor = random_integer_tensor(test_shape, dtype=dtype)
-    input_tensor_channel_first = transpose_to_channel_first(input_tensor)
+    test_input_tensor = transpose_to_channel_first(input_tensor) if kwargs['data_format'] == 'channels_first' else input_tensor
     # generate extended input for the reference operation
     input_tensor_with_zero_imag = tf.concat([
         input_tensor,
         tf.zeros((test_shape[0] * (self.clifford_product.dim - 1),) + test_shape[1:], dtype=dtype),
     ], axis=0)
 
-    test_op = self.prepare_test_op(input_tensor_channel_first, **kwargs)
-    test_output, _, test_kernel_grad, _ = self.compute_output_and_gradients(test_op, input_tensor_channel_first, True)
+    test_op = self.prepare_test_op(test_input_tensor, **kwargs)
+    test_output, _, test_kernel_grad, _ = self.compute_output_and_gradients(test_op, test_input_tensor, True)
 
     ref_op = self.prepare_ref_op(input_tensor_with_zero_imag, test_op, **kwargs)
     ref_output, _, ref_kernel_grad, _ = self.compute_output_and_gradients(ref_op, input_tensor_with_zero_imag, False)
 
-    # do transpositions to channel-first to compare with test tensors
-    ref_output, _, ref_kernel_grad = self.transpose_ref_to_channel_first(ref_output, _, ref_kernel_grad)
+    # do transpositions to compare with test tensors
+    ref_output, _, ref_kernel_grad = self.transpose_ref_tensors(test_op, ref_output, _, ref_kernel_grad)
 
     # assert on the difference between reference and test tensors
     self.assert_equal_tensors(ref_output, test_output)
     self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
-  def run_conv2d_strided_dilated_test_instance(self, test_shape, dtype=tf.float32, **kwargs):
+  def run_conv2d_strided_dilated_test_instance(self, test_shape, strides, dilation_rate, padding, dtype=tf.float32, data_format='channels_first', **kwargs):
     """ Runs a single instance of a forward and backward pass test for a strided and dilated conv.
     The reference operation is run in channel-last format for compatibility with CPU backend.
     :test_shape:          test input shape in channel-last format (NHWC)
+    :strides:             convolution strides
+    :dilation_rate:       convolution dilation rate (currently it has to be equal to strides)
+    :padding:             convolution padding
     :dtype:               scalar data type of the test batch
+    :data_format:         channels first/last convention used by upstride operations
     """
-    if kwargs['strides'] != kwargs['dilation_rate']:
+    if strides != dilation_rate:
       raise NotImplementedError("Currently, only tests with strides equals to dilation_rate are supported.")
-    if (type(kwargs['strides']) is tuple and len(kwargs['strides']) == 2 and kwargs['strides'][0] != kwargs['strides'][1]
-        and 'padding' in kwargs and kwargs['padding'].lower() != 'valid'):
+    if type(strides) is tuple and len(strides) == 2 and strides[0] != strides[1] and padding.lower() == 'same':
       raise NotImplementedError("Currently, tests with padding == 'same' and strides different between height and width are not supported.")
-    assert tuple(kwargs['strides']) != (1, 1), 'this test expects a two-dimensional non-unitary tuple for both strides and dilation_rate'
-  
+
+    kwargs['strides'] = strides
+    kwargs['dilation_rate'] = dilation_rate
+    kwargs['padding'] = padding
+    kwargs['data_format'] = data_format
+
     # verify the parameters passed in kwargs
     self.verify_kwargs(**kwargs)
     kwargs.setdefault('use_bias', False)
 
     # generate random channel-last input
     input_tensor = self.create_input_tensor(test_shape, dtype)
-    input_tensor_channel_first = transpose_to_channel_first(input_tensor)
+    test_input_tensor = transpose_to_channel_first(input_tensor) if data_format == 'channels_first' else input_tensor
 
-    test_op = self.prepare_test_op(input_tensor_channel_first, **kwargs)
-    test_output, test_input_grad, test_kernel_grad, test_bias_grad = self.compute_output_and_gradients(test_op, input_tensor_channel_first, True)
+    test_op = self.prepare_test_op(test_input_tensor, **kwargs)
+    test_output, test_input_grad, test_kernel_grad, test_bias_grad = self.compute_output_and_gradients(test_op, test_input_tensor, True)
 
     # simulate test_op by cherry-picking the desired elements of input_tensor into the new input tensor and setting strides and dilation_rate to 1
-    input_tensor_channel_first_cropped = input_tensor_channel_first[:, :, ::kwargs['strides'][0], ::kwargs['strides'][1]]
-    ref_op_kwargs = kwargs.copy()
-    ref_op_kwargs['strides'] = 1
-    ref_op_kwargs['dilation_rate'] = 1
+    test_input_tensor_cropped = self.get_strided_tensor(test_input_tensor, strides, data_format)
+
+    kwargs['strides'] = 1
+    kwargs['dilation_rate'] = 1
 
     # prepare ref_op based on test_op (instead on cliffordProduct instance) and manually overwrite kernel and bias
-    ref_op = self.prepare_test_op(input_tensor_channel_first_cropped, **ref_op_kwargs)
+    ref_op = self.prepare_test_op(test_input_tensor_cropped, **kwargs)
     if test_op.use_bias:
       ref_op.set_weights([test_op.kernel.numpy(), test_op.bias.numpy()])
     else:
       ref_op.set_weights([test_op.kernel.numpy()])
-    ref_output, ref_input_grad, ref_kernel_grad, ref_bias_grad = self.compute_output_and_gradients(ref_op, input_tensor_channel_first_cropped, True)
+    ref_output, ref_input_grad, ref_kernel_grad, ref_bias_grad = self.compute_output_and_gradients(ref_op, test_input_tensor_cropped, True)
 
     # assert on the difference between reference and test tensors
     self.assert_equal_tensors(ref_output, test_output)
     self.assert_equal_tensors(ref_kernel_grad, test_kernel_grad)
 
     if self.require_input_grad:
-      self.assert_equal_tensors(ref_input_grad, test_input_grad[:, :, ::kwargs['strides'][0], ::kwargs['strides'][1]])
+      test_input_grad_strided = self.get_strided_tensor(test_input_grad, strides, data_format)
+      self.assert_equal_tensors(ref_input_grad, test_input_grad_strided)
 
     if test_op.use_bias:
       # assert on the difference between reference and test bias tensors
@@ -504,73 +533,77 @@ class Conv2DTestSet(Conv2DTestBase):
   def setup(self, clifford_product, test_op_class):
     super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class, 'kernel_initializer')
 
-  def test_basic(self):
+  def test_basic(self, data_format):
     """ Basic Conv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=3)
+    self.run_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=3, data_format=data_format)
 
-  def test_bigger_batch(self):
+  def test_bigger_batch(self, data_format):
     """ Conv2D with bigger batch test """
-    self.run_test_instance(test_shape=(5, 3, 3, 8), filters=32, kernel_size=3)
+    self.run_test_instance(test_shape=(5, 3, 3, 8), filters=32, kernel_size=3, data_format=data_format)
 
-  def test_pointwise(self):
+  def test_pointwise(self, data_format):
     """ Pointwise Conv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=1)
+    self.run_test_instance(test_shape=(1, 5, 5, 8), filters=32, kernel_size=1, data_format=data_format)
 
-  def test_strided(self):
+  def test_strided(self, data_format):
     """ Strided Conv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 64), filters=16, strides=(2, 3), kernel_size=2)
+    self.run_test_instance(test_shape=(1, 5, 5, 64), filters=16, strides=(2, 3), kernel_size=2, data_format=data_format)
 
-  def test_dilated(self):
+  def test_dilated(self, data_format):
     """ Dilated Conv2D test """
-    self.run_test_instance(test_shape=(1, 7, 7, 16), filters=16, dilation_rate=(2, 3), kernel_size=3)
+    self.run_test_instance(test_shape=(1, 7, 7, 16), filters=16, dilation_rate=(2, 3), kernel_size=3, data_format=data_format)
 
-  def test_non_square(self):
+  def test_non_square(self, data_format):
     """ Non-square image Conv2D test """
-    self.run_test_instance(test_shape=(1, 15, 3, 64), filters=16, kernel_size=2)
+    self.run_test_instance(test_shape=(1, 15, 3, 64), filters=16, kernel_size=2, data_format=data_format)
 
-  def test_bias(self):
+  def test_bias(self, data_format):
     """ Biased Conv2D test """
-    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True)
+    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True, data_format=data_format)
 
-  def test_padded(self):
+  def test_padded(self, data_format):
     """ Padded Conv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 32), filters=32, kernel_size=3, padding='same')
+    self.run_test_instance(test_shape=(1, 5, 5, 32), filters=32, kernel_size=3, padding='same', data_format=data_format)
 
-  def test_padded_strided(self):
+  def test_asymmetrically_padded(self, data_format):
+    """ Asymmetric padding test """
+    self.run_test_instance(test_shape=(5, 3, 4, 8), filters=8, kernel_size=3, strides=2, padding='same', data_format=data_format)
+
+  def test_padded_strided(self, data_format):
     """ Padded strided Conv2D test """
-    self.run_test_instance(test_shape=(1, 7, 7, 16), filters=32, kernel_size=3, strides=2, padding='same')
+    self.run_test_instance(test_shape=(1, 7, 7, 16), filters=32, kernel_size=3, strides=2, padding='same', data_format=data_format)
 
-  def test_padded_dilated(self):
+  def test_padded_dilated(self, data_format):
     """ Padded dilated Conv2D test """
-    self.run_test_instance(test_shape=(2, 7, 7, 16), filters=32, kernel_size=3, dilation_rate=(2, 2), padding='same')
+    self.run_test_instance(test_shape=(2, 7, 7, 16), filters=32, kernel_size=3, dilation_rate=(2, 2), padding='same', data_format=data_format)
 
-  @unittest.skipIf(not gpu_visible(), "grouped conv not supported on CPU")
-  @unittest.skipIf(tf.version.VERSION < '2.3.0', "tensorflow version needs to be at least 2.3.0")
-  def test_grouped(self):
+  @pytest.mark.skipif(not gpu_visible(), reason="grouped conv not supported on CPU")
+  @pytest.mark.skipif(tf.version.VERSION < '2.3.0', reason="tensorflow version needs to be at least 2.3.0")
+  def test_grouped(self, data_format):
     """ Group Conv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 64), filters=48, groups=4, kernel_size=3)
+    self.run_test_instance(test_shape=(1, 5, 5, 64), filters=48, groups=4, kernel_size=3, data_format=data_format)
 
-  def test_real_valued_input(self):
+  def test_real_valued_input(self, data_format):
     """ Conv2D with real-valued input test """
-    self.run_conv2d_real_valued_input_test_instance(test_shape=(2, 3, 4, 8), filters=16, kernel_size=3, strides=2, padding='same')
+    self.run_conv2d_real_valued_input_test_instance(test_shape=(2, 3, 4, 8), filters=16, kernel_size=3, strides=2, padding='same', data_format=data_format)
 
-  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
-  def test_fp16(self):
+  @pytest.mark.skipif(not gpu_visible(), reason="fp16 not supported on CPU")
+  def test_fp16(self, data_format):
     """ Half-precision floating point Conv2D test """
-    self.run_fp16_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True)
+    self.run_fp16_test_instance(test_shape=(2, 5, 5, 8), filters=16, kernel_size=3, use_bias=True, data_format=data_format)
 
-  def test_strided_dilated(self): # TODO consider replacing inheritance from unittests to pytest (everywhere) to be able to use @pytest.mark.parametrize
+  @pytest.mark.parametrize('use_bias, strides_and_dilation, padding', [
+    (False, (2, 3), "valid"),
+    (True , (2, 3), "valid"),
+    (False, (3, 3), "same"),
+    (True , (3, 3), "same"),
+    (False, (3, 3), "valid"),
+    (True , (3, 3), "valid"),
+  ])
+  def test_strided_dilated(self, data_format, use_bias, strides_and_dilation, padding):
     """ Strided dilated Conv2D test """
-    params = [
-      (False, (2, 3), "valid"),
-      (True , (2, 3), "valid"),
-      (False, (3, 3), "same"),
-      (True , (3, 3), "same"),
-      (False, (3, 3), "valid"),
-      (True , (3, 3), "valid"),
-    ]
-    for param in params:
-      self.run_conv2d_strided_dilated_test_instance(test_shape=(2, 10, 10, 8), filters=3, kernel_size=3, use_bias=param[0], strides=param[1], dilation_rate=param[1], padding=param[2])
+    self.run_conv2d_strided_dilated_test_instance(
+      test_shape=(2, 10, 10, 8), filters=3, kernel_size=3, use_bias=use_bias, strides=strides_and_dilation, dilation_rate=strides_and_dilation, padding=padding, data_format=data_format)
 
 class PointwiseConv2DTestSet(Conv2DTestBase):
   """ Test set for pointwise Conv2D operation
@@ -578,75 +611,75 @@ class PointwiseConv2DTestSet(Conv2DTestBase):
   def setup(self, clifford_product, test_op_class):
     super().setup(clifford_product, tf.keras.layers.Conv2D, test_op_class, 'kernel_initializer')
 
-  def test_minimal(self):
+  def test_minimal(self, data_format):
     """ Minimal PointwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 1, 1, 1), filters=1, kernel_size=1)
+    self.run_test_instance(test_shape=(1, 1, 1, 1), filters=1, kernel_size=1, data_format=data_format)
 
-  def test_basic(self):
+  def test_basic(self, data_format):
     """ Basic PointwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1)
+    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, data_format=data_format)
 
-  def test_larger_batch(self):
+  def test_larger_batch(self, data_format):
     """ PointwiseConv2D with larger batch test """
-    self.run_test_instance(test_shape=(5, 3, 3, 32), filters=32, kernel_size=1)
+    self.run_test_instance(test_shape=(5, 3, 3, 32), filters=32, kernel_size=1, data_format=data_format)
 
-  def test_batch_largest(self):
+  def test_batch_largest(self, data_format):
     """ PointwiseConv2D with batch size as the largest parameter test """
-    self.run_test_instance(test_shape=(11, 3, 3, 8), filters=8, kernel_size=1)
+    self.run_test_instance(test_shape=(11, 3, 3, 8), filters=8, kernel_size=1, data_format=data_format)
 
-  def test_non_square_high(self):
+  def test_non_square_high(self, data_format):
     """ Non-square high image PointwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 14, 3, 32), filters=16, kernel_size=1)
+    self.run_test_instance(test_shape=(1, 14, 3, 32), filters=16, kernel_size=1, data_format=data_format)
 
-  def test_non_square_wide(self):
+  def test_non_square_wide(self, data_format):
     """ Non-square wide image PointwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 3, 12, 32), filters=16, kernel_size=1)
+    self.run_test_instance(test_shape=(1, 3, 12, 32), filters=16, kernel_size=1, data_format=data_format)
 
-  def test_irregular_params(self):
+  def test_irregular_params(self, data_format):
     """ Irregular size parameters PointwiseConv2D test """
-    self.run_test_instance(test_shape=(7, 11, 5, 3), filters=13, kernel_size=1)
+    self.run_test_instance(test_shape=(7, 11, 5, 3), filters=13, kernel_size=1, data_format=data_format)
 
-  def test_bias(self):
+  def test_bias(self, data_format):
     """ Biased PointwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True)
+    self.run_test_instance(test_shape=(1, 3, 3, 64), filters=32, kernel_size=1, use_bias=True, data_format=data_format)
 
-  def test_bias_larger_batch(self):
+  def test_bias_larger_batch(self, data_format):
     """ Biased PointwiseConv2D with larger batch test """
-    self.run_test_instance(test_shape=(5, 3, 3, 16), filters=32, kernel_size=1, use_bias=True)
+    self.run_test_instance(test_shape=(5, 3, 3, 16), filters=32, kernel_size=1, use_bias=True, data_format=data_format)
 
-  def test_few_filters(self):
+  def test_few_filters(self, data_format):
     """ Few filters PointwiseConv2D test """
-    self.run_test_instance(test_shape=(4, 7, 7, 64), filters=3, kernel_size=1)
+    self.run_test_instance(test_shape=(4, 7, 7, 64), filters=3, kernel_size=1, data_format=data_format)
 
-  def test_few_input_channels(self):
+  def test_few_input_channels(self, data_format):
     """ Few input channels PointwiseConv2D test """
-    self.run_test_instance(test_shape=(4, 7, 7, 3), filters=64, kernel_size=1)
+    self.run_test_instance(test_shape=(4, 7, 7, 3), filters=64, kernel_size=1, data_format=data_format)
 
-  def test_few_channels(self):
+  def test_few_channels(self, data_format):
     """ Few channels PointwiseConv2D test """
-    self.run_test_instance(test_shape=(6, 7, 7, 3), filters=3, kernel_size=1)
+    self.run_test_instance(test_shape=(6, 7, 7, 3), filters=3, kernel_size=1, data_format=data_format)
 
-  def test_even_height(self):
+  def test_even_height(self, data_format):
     """ Image with even height PointwiseConv2D test """
-    self.run_test_instance(test_shape=(3, 4, 3, 16), filters=16, kernel_size=1)
+    self.run_test_instance(test_shape=(3, 4, 3, 16), filters=16, kernel_size=1, data_format=data_format)
 
-  def test_even_width(self):
+  def test_even_width(self, data_format):
     """ Image with even width PointwiseConv2D test """
-    self.run_test_instance(test_shape=(3, 3, 4, 16), filters=16, kernel_size=1)
+    self.run_test_instance(test_shape=(3, 3, 4, 16), filters=16, kernel_size=1, data_format=data_format)
 
-  def test_even_image(self):
+  def test_even_image(self, data_format):
     """ Image with even width and height PointwiseConv2D test """
-    self.run_test_instance(test_shape=(3, 4, 4, 16), filters=16, kernel_size=1)
+    self.run_test_instance(test_shape=(3, 4, 4, 16), filters=16, kernel_size=1, data_format=data_format)
 
-  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
-  def test_fp16(self):
+  @pytest.mark.skipif(not gpu_visible(), reason="fp16 not supported on CPU")
+  def test_fp16(self, data_format):
     """ Half-precision floating point PointwiseConv2D test """
-    self.run_fp16_test_instance(test_shape=(3, 5, 5, 8), filters=16, kernel_size=1)
+    self.run_fp16_test_instance(test_shape=(3, 5, 5, 8), filters=16, kernel_size=1, data_format=data_format)
 
-  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
-  def test_fp16_bias(self):
+  @pytest.mark.skipif(not gpu_visible(), reason="fp16 not supported on CPU")
+  def test_fp16_bias(self, data_format):
     """ Half-precision floating point biased PointwiseConv2D test """
-    self.run_fp16_test_instance(test_shape=(3, 4, 4, 8), filters=16, kernel_size=1, use_bias=True)
+    self.run_fp16_test_instance(test_shape=(3, 4, 4, 8), filters=16, kernel_size=1, use_bias=True, data_format=data_format)
 
 
 class DepthwiseConv2DTestSet(Conv2DTestBase):
@@ -659,48 +692,49 @@ class DepthwiseConv2DTestSet(Conv2DTestBase):
     """ Prepare kernels initialized by the tested operation so that they can be used with the reference operation
     :test_op:             tested operation, which was run already
     """
-    return tf.transpose(TestBase.get_ref_compliant_kernels(self, test_op), utils.permutation("nOIHW", "nHWOI"))
+    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    return tf.transpose(TestBase.get_ref_compliant_kernels(self, test_op), utils.permutation(upstride_layout, "nHWOI"))
 
-  def test_basic(self):
+  def test_basic(self, data_format):
     """ Basic DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3)
+    self.run_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3, data_format=data_format)
 
-  def test_bigger_batch(self):
+  def test_bigger_batch(self, data_format):
     """ DepthwiseConv2D with bigger batch test """
-    self.run_test_instance(test_shape=(5, 3, 3, 16), kernel_size=3)
+    self.run_test_instance(test_shape=(5, 3, 3, 16), kernel_size=3, data_format=data_format)
 
-  def test_strided(self):
+  def test_strided(self, data_format):
     """ Strided DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 11, 11, 32), strides=3, kernel_size=4)
+    self.run_test_instance(test_shape=(1, 11, 11, 32), strides=3, kernel_size=4, data_format=data_format)
 
-  def test_dilated(self):
+  def test_dilated(self, data_format):
     """ Dilated DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 7, 7, 16), dilation_rate=(2, 3), kernel_size=3)
+    self.run_test_instance(test_shape=(1, 7, 7, 16), dilation_rate=(2, 3), kernel_size=3, data_format=data_format)
 
-  def test_non_square(self):
+  def test_non_square(self, data_format):
     """ Non-square image DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 15, 3, 64), kernel_size=2)
+    self.run_test_instance(test_shape=(1, 15, 3, 64), kernel_size=2, data_format=data_format)
 
-  def test_bias(self):
+  def test_bias(self, data_format):
     """ Biased DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 3, 3, 64), kernel_size=1, use_bias=True)
+    self.run_test_instance(test_shape=(1, 3, 3, 64), kernel_size=1, use_bias=True, data_format=data_format)
 
-  def test_padded(self):
+  def test_padded(self, data_format):
     """ Padded DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3, padding='same')
+    self.run_test_instance(test_shape=(1, 5, 5, 32), kernel_size=3, padding='same', data_format=data_format)
 
-  def test_padded_strided(self):
+  def test_padded_strided(self, data_format):
     """ Padded strided DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(1, 7, 7, 16), kernel_size=3, strides=2, padding='same')
+    self.run_test_instance(test_shape=(1, 7, 7, 16), kernel_size=3, strides=2, padding='same', data_format=data_format)
 
-  def test_padded_dilated(self):
+  def test_padded_dilated(self, data_format):
     """ Padded dilated DepthwiseConv2D test """
-    self.run_test_instance(test_shape=(2, 7, 7, 16), kernel_size=3, dilation_rate=(2, 2), padding='same')
+    self.run_test_instance(test_shape=(2, 7, 7, 16), kernel_size=3, dilation_rate=(2, 2), padding='same', data_format=data_format)
 
-  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
-  def test_fp16(self):
+  @pytest.mark.skipif(not gpu_visible(), reason="fp16 not supported on CPU")
+  def test_fp16(self, data_format):
     """ Half-precision floating point DepthwiseConv2D test """
-    self.run_fp16_test_instance(test_shape=(2, 3, 3, 4), kernel_size=2, use_bias=True)
+    self.run_fp16_test_instance(test_shape=(2, 3, 3, 4), kernel_size=2, use_bias=True, data_format=data_format)
 
 
 class DenseTestSet(DenseTestBase):
@@ -721,7 +755,7 @@ class DenseTestSet(DenseTestBase):
     """ Biased Dense test """
     self.run_test_instance(test_shape=(1, 12), units=8, use_bias=True)
 
-  @unittest.skipIf(not gpu_visible(), "fp16 not supported on CPU")
+  @pytest.mark.skipif(not gpu_visible(), reason="fp16 not supported on CPU")
   def test_fp16(self):
     """ Half-precision floating point Dense test """
     self.run_fp16_test_instance(test_shape=(2, 4), units=8, use_bias=True)
