@@ -37,6 +37,7 @@ class Conv2D(convolution.GenericConv2D):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
+               filter_layout=None,
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(kernel_initializer):
@@ -81,6 +82,7 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                activity_regularizer=None,
                depthwise_constraint=None,
                bias_constraint=None,
+               filter_layout=None,
                **kwargs):
     # intercept kernel initializer string
     if is_type1_init(depthwise_initializer):

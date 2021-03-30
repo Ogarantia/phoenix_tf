@@ -12,14 +12,21 @@ from upstride.internal.custom_ops import upstride_conv2d
 from upstride.utils import permutation
 from upstride.internal.layers import append_outermost_dim, CustomInitializer, UpstrideLayer
 
-""" Implements mapping of Conv2D input/output tensors layout aka "data format" onto filter layouts.
+
+""" Implements default value for filter_layout argument depending on data_format and available devices.
     There is no intrinsic link between the tensors and filter layouts except for their support by the backend.
-    This dict implements a convention currently supported by the engine.
 """
-_DATA_FORMAT_TO_FILTER_LAYOUT = {
-  'channels_first': 'OIHW',
-  'channels_last': 'OHWI',
-}
+def normalize_filter_layout(data_format, filter_layout=None):
+  if filter_layout == None:
+    # Inferring from data format and GPU availability
+    _DATA_FORMAT_TO_FILTER_LAYOUT = {
+      'channels_first': 'OIHW',
+      'channels_last': 'OHWI' if tf.test.gpu_device_name() else 'HWIO',
+    }
+    filter_layout = _DATA_FORMAT_TO_FILTER_LAYOUT.get(conv_utils.normalize_data_format(data_format), None)
+    if filter_layout is None:
+      raise ValueError(f"Cannot infer Conv2D filter layout from data format '{data_format}'")
+  return filter_layout
 
 
 class Conv2DKernelInitWrapper(CustomInitializer):
@@ -31,17 +38,14 @@ class Conv2DKernelInitWrapper(CustomInitializer):
    - for a higher-dimensional algebra, UpStride kernels are of rank 5.
   This class makes sure the initial distribution matches the expected one when using a standard keras initializer.
   """
-  def __init__(self, initializer, data_format, depthwise=False):
+  def __init__(self, initializer, filter_layout, depthwise=False):
     self.initializer = tf.keras.initializers.get(initializer)
-    self.data_format = data_format
+    self.filter_layout = filter_layout
     self.depthwise = depthwise
     # get permutations
-    upstride = _DATA_FORMAT_TO_FILTER_LAYOUT.get(data_format, None)
-    if upstride is None:
-      raise ValueError(f"Unsupported data format: {data_format}")
     tensorflow = 'HWOI' if depthwise else 'HWIO'
-    self.up_to_tf = permutation(upstride, tensorflow)
-    self.tf_to_up = permutation(tensorflow, upstride)
+    self.up_to_tf = permutation(filter_layout, tensorflow)
+    self.tf_to_up = permutation(tensorflow, filter_layout)
 
   def __call__(self, shape, dtype=None):
     # type0 convolutions use 4-dim kernels; other algebras have the 5th outermost blade dimension
@@ -64,16 +68,16 @@ class Conv2DKernelInitWrapper(CustomInitializer):
   def get_config(self):
     config = self.initializer.get_config()
     config.update({
-      '_upstride_data_format': self.data_format,
+      '_upstride_filter_layout': self.filter_layout,
       '_upstride_depthwise': self.depthwise
     })
     return config
 
   @classmethod
   def from_config(config):
-    data_format = config.pop('_upstride_data_format')
+    filter_layout = config.pop('_upstride_filter_layout')
     depthwise = config.pop('_upstride_depthwise')
-    return Conv2DKernelInitWrapper(super().from_config(config), data_format=data_format, depthwise=depthwise)
+    return Conv2DKernelInitWrapper(super().from_config(config), filter_layout=filter_layout, depthwise=depthwise)
 
 
 class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
@@ -94,6 +98,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
                activity_regularizer,
                kernel_constraint,
                bias_constraint,
+               filter_layout=None,
                **kwargs):
 
     # Handle group convolution in TF prior to TF2.3
@@ -102,9 +107,12 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
     else:
       kwargs["groups"] = groups
 
+    # set filter layout
+    self.filter_layout = normalize_filter_layout(data_format, filter_layout=None)
+
     # Intercept keras initializer
     if kernel_initializer and not isinstance(kernel_initializer, CustomInitializer):
-      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer, conv_utils.normalize_data_format(data_format))
+      kernel_initializer = Conv2DKernelInitWrapper(kernel_initializer, self.filter_layout)
 
     # Call super class constructor
     super().__init__(filters,
@@ -128,12 +136,7 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
     self.receives_type0_inputs = False          # may be set to True by TF2Upstride, if the inputs will be real tensors
     self.upstride_conv_op = upstride_conv2d     # the backend op to call
 
-    # get filter layout
-    self.filter_layout = _DATA_FORMAT_TO_FILTER_LAYOUT.get(self.data_format, None)
-    if self.filter_layout is None:
-      raise ValueError(f"Cannot infer Conv2D filter layout from data format '{self.data_format}'")
-
-    # Handling casual paddiing in TF prior to TF2.3
+    # Handling casual padding in TF prior to TF2.3
     if version.parse(tf.__version__) < version.parse("2.3"):
       self._is_causal = self.padding.lower() == 'causal'
 
@@ -154,6 +157,9 @@ class GenericConv2D(tf.keras.layers.Conv2D, UpstrideLayer):
     elif self.filter_layout == 'OHWI':
       kernel_shape = append_outermost_dim(self.upstride_datatype,
                                           (self.filters, *self.kernel_size, input_channel // self.groups))
+    elif self.filter_layout == 'HWIO':
+      kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                          (*self.kernel_size, input_channel // self.groups, self.filters))
     else:
       raise ValueError(f'Conv2D filter layout not implemented: {self.filter_layout}')
 
@@ -239,12 +245,13 @@ class GenericDepthwiseConv2D(GenericConv2D):
                activity_regularizer,
                depthwise_constraint,
                bias_constraint,
+               filter_layout=None,
                **kwargs):
 
     # Intercept keras initializer
     if depthwise_initializer and not isinstance(depthwise_initializer, CustomInitializer):
       depthwise_initializer = Conv2DKernelInitWrapper(depthwise_initializer,
-                                                      conv_utils.normalize_data_format(data_format),
+                                                      normalize_filter_layout(data_format, filter_layout=None),
                                                       depthwise=True)
 
     super().__init__(
@@ -264,6 +271,7 @@ class GenericDepthwiseConv2D(GenericConv2D):
         activity_regularizer=activity_regularizer,
         kernel_constraint=None,
         bias_constraint=bias_constraint,
+        filter_layout=filter_layout,
         **kwargs)
     self.depth_multiplier = depth_multiplier
     self.depthwise_initializer = tf.keras.initializers.get(depthwise_initializer)
@@ -289,6 +297,9 @@ class GenericDepthwiseConv2D(GenericConv2D):
     elif self.filter_layout == 'OHWI':
       depthwise_kernel_shape = append_outermost_dim(self.upstride_datatype,
                                                     (num_output_channels, *self.kernel_size, 1))
+    elif self.filter_layout == 'HWIO':
+      depthwise_kernel_shape = append_outermost_dim(self.upstride_datatype,
+                                                    (*self.kernel_size, 1, num_output_channels))
     else:
       raise ValueError(f'Conv2D filter layout not implemented: {self.filter_layout}')
 

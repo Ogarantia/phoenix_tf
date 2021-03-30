@@ -3,7 +3,6 @@ import pytest
 import tensorflow as tf
 from upstride import utils
 from upstride.internal.layers import TYPE0
-from upstride.internal.convolution import _DATA_FORMAT_TO_FILTER_LAYOUT
 
 
 DEFAULT_ERROR_THRESHOLD = 2e-3
@@ -330,7 +329,7 @@ class Conv2DTestBase(TestBase):
     """ Prepare kernels initialized by the tested operation so that they can be used with the reference operation
     :test_op:             tested operation, which was run already
     """
-    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    upstride_layout = "n" + test_op.filter_layout
     return tf.transpose(super().get_ref_compliant_kernels(test_op), utils.permutation(upstride_layout, "nHWIO"))
 
   def transpose_ref_tensors(self, test_op, ref_output, ref_input_grad, ref_kernel_grad):
@@ -340,7 +339,7 @@ class Conv2DTestBase(TestBase):
     :ref_kernel_grad:     reference tensor with gradient wrt kernel
     """
     # transpose kernel tensor
-    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    upstride_layout = "n" + test_op.filter_layout
     ref_kernel_grad = tf.transpose(ref_kernel_grad, utils.permutation("nHWIO", upstride_layout))
     # transpose outputs assuming channels-last reference op
     if test_op.data_format == 'channels_first':
@@ -692,7 +691,7 @@ class DepthwiseConv2DTestSet(Conv2DTestBase):
     """ Prepare kernels initialized by the tested operation so that they can be used with the reference operation
     :test_op:             tested operation, which was run already
     """
-    upstride_layout = "n" + _DATA_FORMAT_TO_FILTER_LAYOUT[test_op.data_format]
+    upstride_layout = "n" + test_op.filter_layout
     return tf.transpose(TestBase.get_ref_compliant_kernels(self, test_op), utils.permutation(upstride_layout, "nHWOI"))
 
   def test_basic(self, data_format):

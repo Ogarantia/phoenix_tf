@@ -35,6 +35,7 @@ class Conv2D(convolution.GenericConv2D):
                activity_regularizer=None,
                kernel_constraint=None,
                bias_constraint=None,
+               filter_layout=None,
                **kwargs):
     super().__init__(filters=filters,
                      kernel_size=kernel_size,
@@ -74,6 +75,7 @@ class DepthwiseConv2D(convolution.GenericDepthwiseConv2D):
                activity_regularizer=None,
                depthwise_constraint=None,
                bias_constraint=None,
+               filter_layout=None,
                **kwargs):
     super().__init__(
         kernel_size=kernel_size,
