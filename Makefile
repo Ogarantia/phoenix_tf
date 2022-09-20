@@ -2,7 +2,7 @@ UPSTRIDE_DEBUG ?= ON		# development build
 UPSTRIDE_DEVICE_DEBUG ?= OFF	# development build
 GPU ?= OFF			# enables GPU backend
 PYTHON ?= python3
-ARCH ?= `arch`           	# possible values are local, x86_64 and aarch64
+ARCH ?= `local`           	# possible values are local, x86_64 and aarch64
 
 # specifying TensorFlow version (availability depends on the platform)
 TF_VERSION?=2.4.0
@@ -66,7 +66,7 @@ install:
 
 # build docker with the compilation environment
 dev_docker:
-	@docker build --build-arg TF_VERSION=$(TF_VERSION) \
+	@docker build --network=host --build-arg TF_VERSION=$(TF_VERSION) \
 				  -t $(DEVELOPMENT_DOCKER_REF) \
 				  -f dockerfiles/dev-$(DOCKERFILE_SUFFIX).dockerfile .
 
